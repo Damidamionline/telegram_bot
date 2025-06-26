@@ -1,9 +1,27 @@
 services:
   - type: web
+    name: telegram-bot
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    plan: free
+    envVars:
+      - key: TELEGRAM_BOT_TOKEN
+        value: 7673608151:AAEOpR9o19HwBTNw_RwdMl6jyPb966QTdtQ  # or use "fromDatabase" if stored elsewhere
+
+  - type: web
     name: twitter-auth-server
     env: python
-    buildCommand: "pip install -r requirements.txt"
-    startCommand: "gunicorn auth_server:app"
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn auth_server:app
+    plan: free
     envVars:
-      - key: PORT
-        value: 8000
+      - key: TWITTER_CLIENT_ID
+        value: 1772343376433553408-6U6CvNLnVnYjMyAmUBBDiB02cCoK79
+      - key: TWITTER_CLIENT_SECRET
+        value: qgZ4yCn55VnlmWrIDRw6WLf1pd5ly2NJvGGsbxfftLVPu
+      - key: FLASK_SECRET
+        value: 6532ef02544b28dd9ad89469b06fad941753a8d0c7f411ab2b0a057a161facac
+      - key: REDIRECT_URI
+        value: https://twitter-auth-server.onrender.com/callback  # your render URL
+

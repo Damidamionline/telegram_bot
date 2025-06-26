@@ -1,17 +1,19 @@
-# auth_server.py
+import os
 from flask import Flask, request, redirect
 import requests
 import sqlite3
-import os
 
-# ───── CONFIG ─────
-CLIENT_ID = "1772343376433553408-6U6CvNLnVnYjMyAmUBBDiB02cCoK79"
-CLIENT_SECRET = "qgZ4yCn55VnlmWrIDRw6WLf1pd5ly2NJvGGsbxfftLVPu"
-REDIRECT_URI = "http://localhost:8000/callback"
+CLIENT_ID = os.getenv("TWITTER_CLIENT_ID")
+CLIENT_SECRET = os.getenv("TWITTER_CLIENT_SECRET")
+FLASK_SECRET = os.getenv("FLASK_SECRET")
+REDIRECT_URI = os.getenv("REDIRECT_URI", "https://your-auth-service.onrender.com/callback")  # default if not set
+
 DB_FILE = "bot_data.db"
 PORT = 8000
 
 app = Flask(__name__)
+app.secret_key = FLASK_SECRET
+
 
 
 # ───── REDIRECT TO TWITTER ─────
