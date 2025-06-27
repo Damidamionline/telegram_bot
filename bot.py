@@ -42,8 +42,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-AUTH_SERVER_URL = os.getenv(
-    "AUTH_SERVER_URL", "https://twitter-auth-server.onrender.com")
+AUTH_SERVER_URL = os.getenv("AUTH_SERVER_URL")
 
 TWITTER_BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAAB%2B%2B2gEAAAAA88pOPepF8nIceHn9310R%2Fy1zoEk%3DeimB2IvJnLmnf74nkrGWKw68daIo7YXhJGs95CUvPidXybofgH"
 
@@ -281,7 +280,9 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
             await update.message.reply_text(
                 "🐦 Before you can join a raid, connect your Twitter account.",
                 reply_markup=InlineKeyboardMarkup([[
-                    InlineKeyboardButton("🔗 Connect Twitter", url=connect_url)
+                    InlineKeyboardButton(
+                        "🔗 Connect Twitter", url=f"{AUTH_SERVER_URL}/login?tgid={telegram_id}")
+
                 ]])
             )
             return
