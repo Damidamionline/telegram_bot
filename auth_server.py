@@ -6,14 +6,14 @@ import sqlite3
 CLIENT_ID = os.getenv("TWITTER_CLIENT_ID")
 CLIENT_SECRET = os.getenv("TWITTER_CLIENT_SECRET")
 FLASK_SECRET = os.getenv("FLASK_SECRET")
-REDIRECT_URI = os.getenv("REDIRECT_URI", "https://your-auth-service.onrender.com/callback")  # default if not set
+REDIRECT_URI = os.getenv(
+    "REDIRECT_URI", "https://your-auth-service.onrender.com/callback")  # default if not set
 
 DB_FILE = "bot_data.db"
 PORT = 8000
 
 app = Flask(__name__)
 app.secret_key = FLASK_SECRET
-
 
 
 # ───── REDIRECT TO TWITTER ─────
@@ -31,8 +31,6 @@ def login():
         f"&redirect_uri={REDIRECT_URI}"
         f"&scope=tweet.read%20users.read%20like.read"
         f"&state={state}"
-        f"&code_challenge=challenge"
-        f"&code_challenge_method=plain"
     )
     return redirect(url)
 
@@ -52,13 +50,12 @@ def callback():
         "code": code,
         "grant_type": "authorization_code",
         "client_id": CLIENT_ID,
+        "client_secret": CLIENT_SECRET,
         "redirect_uri": REDIRECT_URI,
-        "code_verifier": "challenge",
     }
 
     headers = {"Content-Type": "application/x-www-form-urlencoded"}
-    res = requests.post(token_url, data=data, headers=headers,
-                        auth=(CLIENT_ID, CLIENT_SECRET))
+    res = requests.post(token_url, data=data, headers=headers)
 
     if res.status_code != 200:
         print(res.text)
