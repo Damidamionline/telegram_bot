@@ -6,8 +6,8 @@ import sqlite3
 CLIENT_ID = os.getenv("TWITTER_CLIENT_ID")
 CLIENT_SECRET = os.getenv("TWITTER_CLIENT_SECRET")
 FLASK_SECRET = os.getenv("FLASK_SECRET")
-REDIRECT_URI = os.getenv(
-    "REDIRECT_URI", "https://your-auth-service.onrender.com/callback")  # default if not set
+REDIRECT_URI = os.getenv("REDIRECT_URI")
+
 
 DB_FILE = "bot_data.db"
 PORT = 8000

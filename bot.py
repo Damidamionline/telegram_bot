@@ -1,4 +1,25 @@
 # bot.py
+import os
+import requests
+import re
+from db import get_twitter_handle
+from db import get_twitter_handle, get_recent_approved_posts, get_user_stats
+from db import (
+    add_user,
+    get_user,
+    get_user_slots,
+    get_user_stats,
+    save_post,
+    get_pending_posts,
+    set_post_status,
+    deduct_slot_by_admin,
+    expire_old_posts,
+    set_twitter_handle,
+    get_post_link_by_id,
+    has_completed_post,
+    mark_post_completed,
+    add_task_slot,
+)
 from db import get_user
 from twitter_api import has_liked_post_user_token
 import pytz
@@ -17,32 +38,12 @@ from telegram.ext import (
     filters,
 )
 from apscheduler.schedulers.background import BackgroundScheduler
+from dotenv import load_dotenv
+load_dotenv()
 
-from db import (
-    add_user,
-    get_user,
-    get_user_slots,
-    get_user_stats,
-    save_post,
-    get_pending_posts,
-    set_post_status,
-    deduct_slot_by_admin,
-    expire_old_posts,
-    set_twitter_handle,
-    get_post_link_by_id,
-    has_completed_post,
-    mark_post_completed,
-    add_task_slot,
-)
 
-from db import get_twitter_handle, get_recent_approved_posts, get_user_stats
-
-from twitter_api import has_liked_post_user_token
-from db import get_twitter_handle
-
-import re
-import requests
-
+AUTH_SERVER_URL = os.getenv(
+    "AUTH_SERVER_URL", "https://twitter-auth-server.onrender.com")
 
 TWITTER_BEARER_TOKEN = "AAAAAAAAAAAAAAAAAAAAAB%2B%2B2gEAAAAA88pOPepF8nIceHn9310R%2Fy1zoEk%3DeimB2IvJnLmnf74nkrGWKw68daIo7YXhJGs95CUvPidXybofgH"
 
@@ -276,7 +277,7 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         access_token = user_data.get(
             "twitter_access_token") if user_data else None
         if not twitter or not access_token:
-            connect_url = f"http://localhost:8000/login?tgid={user.id}"
+            connect_url = f"{os.getenv('AUTH_SERVER_BASE_URL')}/login?tgid={user.id}"
             await update.message.reply_text(
                 "🐦 Before you can join a raid, connect your Twitter account.",
                 reply_markup=InlineKeyboardMarkup([[

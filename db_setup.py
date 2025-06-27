@@ -18,7 +18,7 @@ def create_database():
             slots            REAL    DEFAULT 2,
             task_slots       REAL    DEFAULT 0,
             ref_count_l1     INTEGER DEFAULT 0,
-            twitter_handle   TEXT
+            twitter_handle   TEXT,
             twitter_access_token   TEXT,
             twitter_refresh_token  TEXT,
             token_expires_at       TIMESTAMP
