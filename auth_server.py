@@ -17,6 +17,7 @@ FLASK_SECRET = os.getenv("FLASK_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 DB_FILE = "bot_data.db"
 PORT = 8000
+print("🔍 ENV Loaded:", CLIENT_ID, REDIRECT_URI)
 
 # ─── Flask Setup ────────────────────────────────────────────
 app = Flask(__name__)
@@ -157,11 +158,11 @@ def callback():
                     twitter_access_token = ?, 
                     twitter_handle = ? 
                    WHERE telegram_id = ?""",
-                (access_token, twitter_handle, telegram_id)
+                (access_token, twitter_handle, twitter_id, state)
             )
 
         conn.commit()
-        logger.info(f"Saved Twitter access for Telegram user {telegram_id}")
+        logger.info(f"Twitter credentials saved for user {state}")
         return f"✅ Twitter connected successfully! Handle: @{twitter_handle}"
 
     except sqlite3.Error as db_err:
