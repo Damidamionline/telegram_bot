@@ -1,4 +1,3 @@
-# db_setup.py
 import sqlite3
 from datetime import datetime
 
@@ -9,9 +8,8 @@ def create_database():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    # ───── users ─────────────────────────────────────────
-    c.execute(
-        """
+    # ───── users ───────────────────────────────────────────────
+    c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             telegram_id           INTEGER PRIMARY KEY,
             name                  TEXT,
@@ -20,36 +18,34 @@ def create_database():
             task_slots            REAL DEFAULT 0,
             ref_count_l1          INTEGER DEFAULT 0,
             twitter_handle        TEXT,
-            twitter_id            TEXT,  -- Added this column
+            twitter_id            TEXT,
             twitter_access_token  TEXT,
             twitter_refresh_token TEXT,
             token_expires_at      TIMESTAMP,
             created_at            TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_updated          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
-        """
-    )
+    """)
 
-    # Add any missing columns that might have been added later
+    # Auto-add any missing columns
     c.execute("PRAGMA table_info(users)")
-    existing_columns = [col[1] for col in c.fetchall()]
+    existing_columns = {col[1] for col in c.fetchall()}
 
-    # List of columns that should exist
-    required_columns = [
-        ('twitter_id', 'TEXT'),
-        ('created_at', 'TIMESTAMP'),
-        ('last_updated', 'TIMESTAMP')
+    additional_columns = [
+        ("twitter_id", "TEXT"),
+        ("twitter_refresh_token", "TEXT"),
+        ("token_expires_at", "TIMESTAMP"),
+        ("created_at", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
+        ("last_updated", "TIMESTAMP DEFAULT CURRENT_TIMESTAMP"),
     ]
 
-    for column_name, column_type in required_columns:
-        if column_name not in existing_columns:
-            c.execute(
-                f"ALTER TABLE users ADD COLUMN {column_name} {column_type}")
-            print(f"✅ Added missing column: {column_name}")
+    for column, col_type in additional_columns:
+        if column not in existing_columns:
+            c.execute(f"ALTER TABLE users ADD COLUMN {column} {col_type}")
+            print(f"✅ Added missing column to users: {column}")
 
-    # ───── posts ─────────────────────────────────────────
-    c.execute(
-        """
+    # ───── posts ───────────────────────────────────────────────
+    c.execute("""
         CREATE TABLE IF NOT EXISTS posts (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id   INTEGER REFERENCES users(telegram_id),
@@ -60,12 +56,10 @@ def create_database():
             expires_at    TIMESTAMP,
             FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
         )
-        """
-    )
+    """)
 
-    # ───── slot_log ──────────────────────────────────────
-    c.execute(
-        """
+    # ───── slot_log ────────────────────────────────────────────
+    c.execute("""
         CREATE TABLE IF NOT EXISTS slot_log (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id  INTEGER REFERENCES users(telegram_id),
@@ -75,12 +69,10 @@ def create_database():
             created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (telegram_id) REFERENCES users(telegram_id)
         )
-        """
-    )
+    """)
 
-    # ───── completions ───────────────────────────────────
-    c.execute(
-        """
+    # ───── completions ─────────────────────────────────────────
+    c.execute("""
         CREATE TABLE IF NOT EXISTS completions (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id  INTEGER REFERENCES users(telegram_id),
@@ -90,10 +82,9 @@ def create_database():
             FOREIGN KEY (telegram_id) REFERENCES users(telegram_id),
             FOREIGN KEY (post_id) REFERENCES posts(id)
         )
-        """
-    )
+    """)
 
-    # Create indexes for better performance
+    # ───── Indexes ─────────────────────────────────────────────
     c.execute(
         "CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)")
@@ -106,23 +97,23 @@ def create_database():
 
 
 def migrate_existing_data():
-    """Helper function to migrate existing data if needed"""
+    """Backfill any existing rows with NULLs in new columns"""
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
-
     try:
-        # Add default values for any new columns
+        # Twitter ID fallback
         c.execute("""
-            UPDATE users SET 
-                twitter_id = '',
+            UPDATE users
+            SET twitter_id = COALESCE(twitter_id, ''),
+                twitter_refresh_token = COALESCE(twitter_refresh_token, ''),
+                token_expires_at = COALESCE(token_expires_at, NULL),
                 created_at = COALESCE(created_at, datetime('now')),
                 last_updated = datetime('now')
-            WHERE created_at IS NULL
         """)
         conn.commit()
-        print("✅ Migrated existing user data")
+        print("✅ Migrated existing user data where needed.")
     except sqlite3.Error as e:
-        print(f"⚠️ Migration not needed or failed: {e}")
+        print(f"⚠️ Migration skipped or failed: {e}")
     finally:
         conn.close()
 
