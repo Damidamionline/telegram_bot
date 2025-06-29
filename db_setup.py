@@ -60,7 +60,7 @@ def create_database():
 
     # ───── slot_log ────────────────────────────────────────────
     c.execute("""
-        CREATE TABLE IF NOT EXISTS slot_log (
+        CREATE TABLE IF NOT EXISTS slot_logs (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id  INTEGER REFERENCES users(telegram_id),
             slots        REAL,

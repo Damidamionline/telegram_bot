@@ -149,8 +149,9 @@ def callback():
         response.raise_for_status()
         token_data = response.json()
     except requests.exceptions.RequestException as e:
-        logger.error(f"Token exchange failed: {str(e)}")
-        return "Twitter authentication failed", 400
+        import traceback
+        logger.error("Database error occurred:\n" + traceback.format_exc())
+        return "Database error occurred", 500
 
     access_token = token_data["access_token"]
     refresh_token = token_data.get("refresh_token")
