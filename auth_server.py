@@ -20,6 +20,7 @@ FLASK_SECRET = os.getenv("FLASK_SECRET")
 REDIRECT_URI = os.getenv("REDIRECT_URI")
 TELEGRAM_TOKEN = os.getenv("TELEGRAM_TOKEN")
 DB_FILE = "bot_data.db"
+PORT = 8000
 
 # ─── Flask Setup ────────────────────────────────────────────
 app = Flask(__name__)
@@ -148,9 +149,8 @@ def callback():
         response.raise_for_status()
         token_data = response.json()
     except requests.exceptions.RequestException as e:
-        import traceback
-        logger.error("Database error occurred:\n" + traceback.format_exc())
-        return "Database error occurred", 500
+        logger.error(f"Token exchange failed: {str(e)}")
+        return "Twitter authentication failed", 400
 
     access_token = token_data["access_token"]
     refresh_token = token_data.get("refresh_token")
@@ -244,5 +244,3 @@ def callback():
 # ─── Server Start ───────────────────────────────────────────
 if __name__ == "__main__":
     app.run(port=PORT, debug=True)
-    create_database()
-    migrate_existing_data()
