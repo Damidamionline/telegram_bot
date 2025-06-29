@@ -67,7 +67,7 @@ def add_user(telegram_id, name, ref_by=None):
 
         # Log slot gain
         c.execute("""
-            INSERT INTO slot_log (telegram_id, slots, reason, created_at)
+            INSERT INTO slot_logs (telegram_id, slots, reason, created_at)
             VALUES (?, ?, 'referral', ?)
         """, (ref_by, 0.5, datetime.utcnow()))
 
@@ -115,7 +115,7 @@ def add_task_slot(telegram_id: int, amount: float):
         (amount, amount, telegram_id)
     )
     c.execute(
-        "INSERT INTO slot_log (telegram_id, slots, reason, created_at) VALUES (?, ?, 'task', ?)",
+        "INSERT INTO slot_logs (telegram_id, slots, reason, created_at) VALUES (?, ?, 'task', ?)",
         (telegram_id, amount, datetime.utcnow())
     )
     conn.commit()
@@ -220,8 +220,8 @@ def get_user_stats(telegram_id: int):
         SELECT
             (SELECT COUNT(*) FROM posts WHERE telegram_id = ? AND status = 'approved'),
             (SELECT COUNT(*) FROM posts WHERE telegram_id = ? AND status = 'rejected'),
-            (SELECT IFNULL(SUM(slots), 0) FROM slot_log WHERE telegram_id = ? AND reason = 'task'),
-            (SELECT IFNULL(SUM(slots), 0) FROM slot_log WHERE telegram_id = ? AND reason = 'referral')
+            (SELECT IFNULL(SUM(slots), 0) FROM slot_logs WHERE telegram_id = ? AND reason = 'task'),
+            (SELECT IFNULL(SUM(slots), 0) FROM slot_logs WHERE telegram_id = ? AND reason = 'referral')
         """,
         (telegram_id, telegram_id, telegram_id, telegram_id),
     ).fetchone()

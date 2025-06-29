@@ -58,7 +58,7 @@ def create_database():
         )
     """)
 
-    # ───── slot_log ────────────────────────────────────────────
+    # ───── slot_logs ────────────────────────────────────────────
     c.execute("""
         CREATE TABLE IF NOT EXISTS slot_logs (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
