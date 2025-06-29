@@ -1,13 +1,16 @@
+import sqlite3
 import os
 import re
 import pytz
 import logging
 from datetime import datetime, timedelta
+from threading import Thread
 from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardMarkup
+    ReplyKeyboardMarkup,
+    Bot
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -42,6 +45,7 @@ API_KEY = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_URL = "https://t.me/Damitechinfo"
 SUPPORT_URL = "https://t.me/web3kaijun"
 ADMINS = [6229232611]  # Telegram IDs of admins
+TWITTER_VERIFICATION_INTERVAL = 3600  # Check Twitter connection every hour
 
 # ──────────────────────── UTILITIES ─────────────────────────
 
@@ -49,9 +53,46 @@ ADMINS = [6229232611]  # Telegram IDs of admins
 def run_background_jobs():
     """Runs hourly job that expires approved posts >24 h old."""
     scheduler = BackgroundScheduler(timezone=pytz.utc)
-    scheduler.add_job(expire_old_posts, "interval", hours=1)
+    scheduler.add_job(
+        expire_old_posts,
+        "interval",
+        hours=1,
+        next_run_time=datetime.now() + timedelta(minutes=1)
+    )
     scheduler.start()
     logger.info("🕒 Background job started to expire old posts every hour.")
+
+
+def check_expired_tokens():
+    """Notify users with expired tokens"""
+    import sqlite3  # Make sure this is imported at the top
+
+    conn = sqlite3.connect(DB_FILE)
+    try:
+        cursor = conn.cursor()
+        cursor.execute("""
+            SELECT telegram_id, twitter_handle
+            FROM users
+            WHERE token_expires_at < datetime('now')
+        """)
+        expired_users = cursor.fetchall()
+
+        bot = Bot(token=API_KEY)
+        for user_id, handle in expired_users:
+            try:
+                bot.send_message(
+                    chat_id=user_id,
+                    text=f"⚠️ Your Twitter connection (@{handle}) has expired.\n"
+                    "Please reconnect to continue raiding:",
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton(
+                        "Reconnect",
+                        url=f"{AUTH_SERVER_URL}/login?tgid={user_id}"
+                    )]])
+                )
+            except Exception as e:
+                logger.error(f"Failed to notify user {user_id}: {str(e)}")
+    finally:
+        conn.close()
 
 
 def extract_tweet_id(link: str) -> str | None:
@@ -75,6 +116,34 @@ def main_kbd(user_id: int | None = None) -> ReplyKeyboardMarkup:
 def cancel_kbd() -> ReplyKeyboardMarkup:
     """Cancel action keyboard"""
     return ReplyKeyboardMarkup([["🚫 Cancel"]], resize_keyboard=True)
+
+
+def check_twitter_connection(user_id: int) -> bool:
+    """Check if user has valid Twitter connection"""
+    user_data = get_user(user_id)
+    if not user_data or not user_data.get('twitter_access_token'):
+        return False
+
+    # Check if token is expired
+    expires_at = user_data.get('token_expires_at')
+    if expires_at and datetime.now() > datetime.fromisoformat(expires_at):
+        return False
+
+    return True
+
+
+async def notify_twitter_required(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send Twitter connection prompt"""
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🔗 Connect Twitter",
+            url=f"{AUTH_SERVER_URL}/login?tgid={update.effective_user.id}"
+        )
+    ]])
+    await update.message.reply_text(
+        "🔐 You need to connect your Twitter account to participate in raids.",
+        reply_markup=keyboard
+    )
 
 # ────────────────────────── COMMANDS ────────────────────────
 
@@ -192,6 +261,31 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ──────────────────────── CALLBACK HANDLERS ─────────────────
 
 
+async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /connect command"""
+    user = update.effective_user
+    auth_url = f"{AUTH_SERVER_URL}/login?tgid={user.id}"
+
+    await update.message.reply_text(
+        "Click below to connect your Twitter account:",
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔗 Connect Twitter", url=auth_url)
+        ]])
+    )
+
+
+async def check_connection(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /check_connection command"""
+    user = update.effective_user
+    if check_twitter_connection(user.id):
+        user_data = get_user(user.id)
+        await update.message.reply_text(
+            f"✅ Connected to Twitter as @{user_data['twitter_handle']}"
+        )
+    else:
+        await notify_twitter_required(update, context)
+
+
 async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle all callback button presses"""
     query = update.callback_query
@@ -223,7 +317,9 @@ async def handle_raid_participation(update: Update, context: ContextTypes.DEFAUL
     await query.answer()
     user = query.from_user
     post_id = int(query.data.split("|")[1])
-
+    if not check_twitter_connection(user.id):
+        await notify_twitter_required(update, context)
+        return
     user_data = get_user(user.id)
     if not user_data or not user_data.get('twitter_access_token'):
         await query.edit_message_text(
@@ -469,10 +565,10 @@ def main():
 
     # Command handlers
     app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("connect", connect_twitter))
     app.add_handler(CommandHandler("check_twitter", check_twitter_connection))
     app.add_handler(CommandHandler("review", review_posts))
-
+    app.add_handler(CommandHandler("connect", connect_twitter))
+    app.add_handler(CommandHandler("check_connection", check_connection))
     # Callback handlers
     app.add_handler(CallbackQueryHandler(
         handle_callback_buttons, pattern=r"^confirm_twitter\|"))

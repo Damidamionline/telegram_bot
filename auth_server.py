@@ -71,6 +71,27 @@ def notify_telegram(telegram_id: int, twitter_handle: str):
 # ─── Utility: Fetch Twitter User Info ───────────────────────
 
 
+# Save Twitter info into database
+def save_twitter_info(tgid, twitter_handle, twitter_id, access_token, expires_in=7200):
+    token_expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat()
+
+    conn = sqlite3.connect(DB_FILE)
+    cursor = conn.cursor()
+
+    cursor.execute("""
+        INSERT INTO users (telegram_id, twitter_handle, twitter_id, twitter_access_token, token_expires_at)
+        VALUES (?, ?, ?, ?, ?)
+        ON CONFLICT(telegram_id) DO UPDATE SET
+            twitter_handle = excluded.twitter_handle,
+            twitter_id = excluded.twitter_id,
+            twitter_access_token = excluded.twitter_access_token,
+            token_expires_at = excluded.token_expires_at
+    """, (tgid, twitter_handle, twitter_id, access_token, token_expires_at))
+
+    conn.commit()
+    conn.close()
+
+
 def get_twitter_user_info(access_token: str):
     url = "https://api.twitter.com/2/users/me"
     headers = {
