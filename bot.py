@@ -7,7 +7,9 @@ from telegram import (
     Update,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
-    ReplyKeyboardMarkup
+    ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
+    KeyboardButton
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -92,6 +94,11 @@ def extract_tweet_id(url: str) -> str | None:
     if match:
         return match.group(2)
     return None
+
+# Main menu keyboard
+
+
+
 
 
 def is_valid_tweet_link(url: str) -> bool:
@@ -397,6 +404,18 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
 
     if context.user_data.get("awaiting_twitter"):
+        if txt == "🚫 Cancel":
+            context.user_data["awaiting_twitter"] = False
+            await update.message.reply_text(
+                "🚫 Twitter handle setup cancelled.",
+                reply_markup=ReplyKeyboardRemove()
+            )
+            await update.message.reply_text(
+                "🔙 Back to main menu.",
+                reply_markup=main_kbd(user.id)
+            )
+            return
+
         handle = txt.strip().lstrip("@")
         context.user_data["pending_handle"] = handle
         context.user_data["awaiting_twitter"] = False
@@ -444,11 +463,15 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
     user = update.effective_user
     user_data = get_user(user.id)
 
-    if not user_data or not user_data.get('twitter_handle'):
-        await update.message.reply_text(
-            "🐦 Please send your Twitter handle (without @) to join raids."
-        )
+    if not user_data.get("twitter_handle"):
         context.user_data["awaiting_twitter"] = True
+        await update.message.reply_text(
+            "📮 Please send your Twitter handle (e.g., `@username`).",
+            parse_mode="Markdown",
+            reply_markup=ReplyKeyboardMarkup(
+                [["🚫 Cancel"]], resize_keyboard=True)
+        )
+
         return
 
     posts = get_recent_approved_posts(with_time=True)
