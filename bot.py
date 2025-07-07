@@ -33,7 +33,7 @@ from db import (
     get_verifications_for_post, update_last_post_time
 
 )
-
+from apscheduler.triggers.cron import CronTrigger
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -46,8 +46,10 @@ load_dotenv()
 # Configuration
 API_KEY = os.getenv("TELEGRAM_TOKEN")
 CHANNEL_URL = "https://t.me/Damitechinfo"
+REQUIRED_GROUP = "@telemtsa"
 SUPPORT_URL = "https://t.me/web3kaijun"
 ADMINS = [6229232611]  # Telegram IDs of admins
+GROUP_CHAT_ID = -1002828603829
 
 # ──────────────────────── UTILITIES ─────────────────────────
 
@@ -81,6 +83,12 @@ def run_background_jobs():
         next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3)
     )
 
+    scheduler.add_job(
+        lambda: app.create_task(send_daily_reminder(app.bot)),
+        trigger=CronTrigger(hour=10, minute=0, timezone="Africa/Lagos"),
+        id="daily_reminder"
+    )
+
     scheduler.start()
     logger.info("🕒 Background jobs started.")
 
@@ -96,9 +104,6 @@ def extract_tweet_id(url: str) -> str | None:
     return None
 
 # Main menu keyboard
-
-
-
 
 
 def is_valid_tweet_link(url: str) -> bool:
@@ -125,30 +130,63 @@ def cancel_kbd() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup([["🚫 Cancel"]], resize_keyboard=True)
 
 
+async def send_daily_reminder(context: ContextTypes.DEFAULT_TYPE):
+    await context.bot.send_message(
+        chat_id=GROUP_CHAT_ID,
+        text="🔔 *Daily Reminder*\n\nDon't forget to complete your raids, submit your posts, and earn engagement slots today! 💰",
+        parse_mode="Markdown"
+    )
+
 # ────────────────────────── COMMANDS ────────────────────────
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Handle /start command"""
     user = update.effective_user
     args = context.args
     ref_by = int(args[0]) if args and args[0].isdigit() else None
 
+    # Enforce group join
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_GROUP, user.id)
+        if member.status not in ("member", "administrator", "creator"):
+            raise Exception("Not a member")
+    except:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📥 Join Beta Group",
+                                  url="https://t.me/telemtsa")],
+            [InlineKeyboardButton("✅ Done", callback_data="check_join")]
+        ])
+        await update.message.reply_text(
+            "🚀 *Welcome to the Beta Test of this bot*\n\n"
+            "To start using this bot, please join our *beta testing group* first.",
+            parse_mode="Markdown",
+            reply_markup=keyboard
+        )
+        return
+
+    # Register the user
     added = add_user(user.id, user.full_name, ref_by)
 
+    # Welcome message
     welcome = (
-        f"*Welcome {user.first_name}!*\n\n"
-        "🎉 You've been registered with *2 engagement slots*.\n"
-        "🔗 Share your referral link to earn more slots.\n\n"
-        f"`https://t.me/{context.bot.username}?start={user.id}`"
+        f"👋 *Welcome {user.first_name} to the Web3 Raid Bot (Beta)!*\n\n"
+        "Here’s what you can do:\n"
+        "• 📤 Submit your Twitter/X posts for engagement (costs 1 slot)\n"
+        "• ✅ Join other users' raids to earn 0.1 slots per raid\n"
+        "• 📨 Invite friends to earn 0.2 slots each\n"
+        "• 👤 View your profile: slot stats, referrals, and Twitter handle\n"
+        "• 🧠 Manual verification system ensures fairness\n\n"
+        "Beta testers get *2 free slots* and early access to all features!\n\n"
+        f"🔗 Your referral link:\n`https://t.me/{context.bot.username}?start={user.id}`"
     ) if added else (
-        f"*Welcome back, {user.first_name}!* 👋\n\n"
-        "Here's your referral link again:\n"
-        f"`https://t.me/{context.bot.username}?start={user.id}`"
+        f"👋 *Welcome back {user.first_name}!*\n\n"
+        f"🔗 Your referral link:\n`https://t.me/{context.bot.username}?start={user.id}`",
+
+
     )
 
     await update.message.reply_text(welcome, parse_mode="Markdown")
-    await update.message.reply_text("🔘 Choose an option:", reply_markup=main_kbd(user.id))
+    await update.message.reply_text("🔘 Choose an option below:", reply_markup=main_kbd(user.id))
 
 
 # ──────────────────────── ADMIN COMMANDS ─────────────────────
@@ -215,6 +253,13 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
                 f"✅ Twitter handle @`{handle}` has been confirmed and saved.",
                 parse_mode="Markdown"
             )
+            # Go back to main menu
+            await context.bot.send_message(
+                chat_id=user.id,
+                text="🔘 You're now connected! Choose an option:",
+                reply_markup=main_kbd(user.id)
+            )
+            context.user_data.pop("awaiting_twitter", None)  # Clean up state
         else:
             await query.edit_message_text(
                 f"❌ The handle @`{handle}` is already in use by another user.\n"
@@ -251,6 +296,16 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
             text="❌ Your raid was rejected by the post owner. No slots awarded."
         )
         await query.edit_message_text("🔴 You rejected the raid.")
+
+    elif data == "check_join":
+        try:
+            member = await context.bot.get_chat_member(REQUIRED_GROUP, user.id)
+            if member.status in ("member", "administrator", "creator"):
+                await query.edit_message_text("✅ You're in! Please click /start again to continue.")
+            else:
+                await query.edit_message_text("🚫 You haven't joined the group yet click /start to retry.")
+        except:
+            await query.edit_message_text("❌ Couldn't verify. Try again later.")
 
 
 async def handle_my_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -624,7 +679,7 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         "📨 *Referral Program*\n\n"
-        "🎯 Invite others and earn *0.5 engagement slot* per referral!\n\n"
+        "🎯 Invite others and earn *0.2 engagement slot* per referral!\n\n"
         f"🔗 Your referral link:\n`{ref_link}`\n\n"
         f"📊 *Total Referrals:* {ref1}",
         parse_mode="Markdown"
@@ -654,6 +709,14 @@ async def handle_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         parse_mode="Markdown",
         disable_web_page_preview=True
     )
+
+
+async def has_joined_required_group(user_id: int, context: ContextTypes.DEFAULT_TYPE) -> bool:
+    try:
+        member = await context.bot.get_chat_member(REQUIRED_GROUP, user_id)
+        return member.status in ("member", "administrator", "creator")
+    except:
+        return False
 
 
 async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -717,6 +780,9 @@ def main():
         "^📊 My Ongoing Raids$"), handle_my_ongoing_raids))
     app.add_handler(CallbackQueryHandler(
         handle_view_responses, pattern=r"^responses\|"))
+    app.add_handler(CallbackQueryHandler(handle_callback_buttons))  # Catch all
+    app.add_handler(CallbackQueryHandler(
+        handle_callback_buttons, pattern=r"^(vconfirm|vreject)\|"))
 
     # Message handler
     app.add_handler(MessageHandler(

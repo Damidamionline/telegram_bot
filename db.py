@@ -1,6 +1,6 @@
-from datetime import datetime, timedelta
-import sqlite3
 import re
+import sqlite3
+from datetime import datetime, timedelta
 
 DB_FILE = "bot_data.db"
 
@@ -137,7 +137,7 @@ def add_user(telegram_id, name, ref_by=None):
     if ref_by:
         c.execute("""
             UPDATE users
-            SET slots = slots + 0.5,
+            SET slots = slots + 0.2,
                 ref_count_l1 = ref_count_l1 + 1
             WHERE telegram_id = ?
         """, (ref_by,))
@@ -145,7 +145,7 @@ def add_user(telegram_id, name, ref_by=None):
         c.execute("""
             INSERT INTO slot_logs (telegram_id, slots, reason, created_at)
             VALUES (?, ?, 'referral', ?)
-        """, (ref_by, 0.5, datetime.utcnow()))
+        """, (ref_by, 0.2, datetime.utcnow()))
 
     conn.commit()
     conn.close()
@@ -472,7 +472,7 @@ def get_expired_unconfirmed_verifications():
         SELECT DISTINCT v.owner_id
         FROM verifications v
         JOIN posts p ON v.post_id = p.id
-        WHERE v.status = 'pending'
+        WHERE v.responded = 0
         AND p.status = 'expired'
         AND p.approved_at <= ?
     """, (cutoff,)).fetchall()
