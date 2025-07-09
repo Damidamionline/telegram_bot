@@ -504,10 +504,10 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         await handle_cancel(update, context)
     elif txt == "👤 Profile":
         await handle_profile(update, context)
-    elif context.user_data.get("awaiting_post"):
-        await handle_post_submission(update, context)
     elif txt == "📊 Stats":
         await handle_stats_backup(update, context)
+    elif context.user_data.get("awaiting_post"):
+        await handle_post_submission(update, context)
 
     else:
         await update.message.reply_text("❓ I didn't understand that. Choose an option:", reply_markup=main_kbd(user.id))
@@ -632,7 +632,6 @@ async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE
         filename="bot_data_backup.db",
         caption="📦 Here is the current bot_data.db backup.\nYou can restore it after redeploying.",
     )
-
 
     # User is submitting a post link
     if context.user_data.get("awaiting_post"):
