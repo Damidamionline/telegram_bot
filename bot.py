@@ -121,7 +121,7 @@ def main_kbd(user_id: int | None = None) -> ReplyKeyboardMarkup:
 
     ]
     if user_id in ADMINS:
-        keyboard.append(["🛠️ Review Posts"])
+        keyboard.append(["🛠️ Review Posts", "📊 Stats"])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
@@ -506,6 +506,9 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         await handle_profile(update, context)
     elif context.user_data.get("awaiting_post"):
         await handle_post_submission(update, context)
+    elif txt == "📊 Stats":
+        await handle_stats_backup(update, context)
+
     else:
         await update.message.reply_text("❓ I didn't understand that. Choose an option:", reply_markup=main_kbd(user.id))
 
@@ -610,6 +613,26 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown"
         )
         return
+
+
+async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send raw DB file to admin."""
+    user = update.effective_user
+    if user.id not in ADMINS:
+        return
+
+    db_path = "bot_data.db"  # or your actual DB file path
+
+    if not os.path.exists(db_path):
+        await update.message.reply_text("❌ Database file not found.")
+        return
+
+    await update.message.reply_document(
+        document=open(db_path, "rb"),
+        filename="bot_data_backup.db",
+        caption="📦 Here is the current bot_data.db backup.\nYou can restore it after redeploying.",
+    )
+
 
     # User is submitting a post link
     if context.user_data.get("awaiting_post"):
