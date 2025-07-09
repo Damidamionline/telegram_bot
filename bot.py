@@ -49,7 +49,7 @@ CHANNEL_URL = "https://t.me/Damitechinfo"
 REQUIRED_GROUP = "@telemtsa"
 SUPPORT_URL = "https://t.me/web3kaijun"
 ADMINS = [6229232611]  # Telegram IDs of admins
-GROUP_CHAT_ID = -1002828603829
+GROUP_ID = -1002828603829
 
 # ──────────────────────── UTILITIES ─────────────────────────
 
@@ -83,10 +83,13 @@ def run_background_jobs():
         next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3)
     )
 
+    # DAILY REMINDER AT 10 AM
     scheduler.add_job(
-        lambda: app.create_task(send_daily_reminder(app.bot)),
-        trigger=CronTrigger(hour=10, minute=0, timezone="Africa/Lagos"),
-        id="daily_reminder"
+        lambda: application.bot.send_message(
+            chat_id=GROUP_ID,
+            text="📢 Daily Reminder: Don’t forget to complete your raids and submit your posts!"
+        ),
+        trigger=CronTrigger(hour=10, minute=0, timezone='Africa/Lagos')
     )
 
     scheduler.start()
@@ -183,6 +186,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Here's your referral link again 🔗\n\n"
         f"`https://t.me/{context.bot.username}?start={user.id}`"
     )
+    print(update.effective_chat.id)
 
     await update.message.reply_text(welcome, parse_mode="Markdown")
     await update.message.reply_text("🔘 Choose an option below:", reply_markup=main_kbd(user.id))
