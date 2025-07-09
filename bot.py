@@ -614,25 +614,6 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-
-async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Send raw DB file to admin."""
-    user = update.effective_user
-    if user.id not in ADMINS:
-        return
-
-    db_path = "bot_data.db"  # or your actual DB file path
-
-    if not os.path.exists(db_path):
-        await update.message.reply_text("❌ Database file not found.")
-        return
-
-    await update.message.reply_document(
-        document=open(db_path, "rb"),
-        filename="bot_data_backup.db",
-        caption="📦 Here is the current bot_data.db backup.\nYou can restore it after redeploying.",
-    )
-
     # User is submitting a post link
     if context.user_data.get("awaiting_post"):
         text = update.message.text.strip()
@@ -685,6 +666,25 @@ async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE
         reply_markup=cancel_kbd()
     )
     context.user_data["awaiting_post"] = True
+
+
+async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send raw DB file to admin."""
+    user = update.effective_user
+    if user.id not in ADMINS:
+        return
+
+    db_path = "bot_data.db"  # or your actual DB file path
+
+    if not os.path.exists(db_path):
+        await update.message.reply_text("❌ Database file not found.")
+        return
+
+    await update.message.reply_document(
+        document=open(db_path, "rb"),
+        filename="bot_data_backup.db",
+        caption="📦 Here is the current bot_data.db backup.\nYou can restore it after redeploying.",
+    )
 
 
 async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
