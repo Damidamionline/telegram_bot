@@ -179,10 +179,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Beta testers get *2 free slots* and early access to all features!\n\n"
         f"🔗 Your referral link:\n`https://t.me/{context.bot.username}?start={user.id}`"
     ) if added else (
-        f"👋 *Welcome back {user.first_name}!*\n\n"
-        f"🔗 Your referral link:\n`https://t.me/{context.bot.username}?start={user.id}`",
-
-
+        f"*Welcome back, {user.first_name}!* 👋\n\n"
+        "Here's your referral link again 🔗\n\n"
+        f"`https://t.me/{context.bot.username}?start={user.id}`"
     )
 
     await update.message.reply_text(welcome, parse_mode="Markdown")
