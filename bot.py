@@ -11,6 +11,7 @@ from telegram import (
     ReplyKeyboardRemove,
     KeyboardButton
 )
+from telegram.constants import ChatType
 from telegram.ext import (
     ApplicationBuilder,
     CommandHandler,
@@ -30,7 +31,7 @@ from db import (
     expire_old_posts, ban_unresponsive_post_owners, is_user_banned, create_verification,
     mark_post_completed, get_post_owner_id, create_verification, mark_post_completed,
     close_verification, auto_approve_stale_posts, is_in_cooldown, get_user_active_posts,
-    get_verifications_for_post, update_last_post_time
+    get_verifications_for_post, update_last_post_time,
 
 )
 from apscheduler.triggers.cron import CronTrigger
@@ -189,7 +190,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     print(update.effective_chat.id)
 
     await update.message.reply_text(welcome, parse_mode="Markdown")
-    await update.message.reply_text("🔘 Choose an option below:", reply_markup=main_kbd(user.id))
+    if update.message.chat.type == ChatType.PRIVATE:
+        await update.message.reply_text("🔘 Choose an option:", reply_markup=main_kbd(user.id))
 
 
 # ──────────────────────── ADMIN COMMANDS ─────────────────────
@@ -810,8 +812,15 @@ def main():
         handle_callback_buttons, pattern=r"^(vconfirm|vreject)\|"))
 
     # Message handler
-    app.add_handler(MessageHandler(
-        filters.TEXT & ~filters.COMMAND, handle_message_buttons))
+
+
+# Handle normal messages ONLY in private chats
+    app.add_handler(
+        MessageHandler(
+            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+            handle_message_buttons
+        )
+    )
 
     logger.info("🤖 Bot is running...")
     app.run_polling()
