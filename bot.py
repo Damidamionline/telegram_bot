@@ -524,20 +524,42 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle ongoing raids display"""
     user = update.effective_user
+    chat = update.effective_chat
     user_data = get_user(user.id)
 
-    if not user_data.get("twitter_handle"):
-        context.user_data["awaiting_twitter"] = True
+    if not user_data:
         await update.message.reply_text(
-            "📮 Please send your Twitter handle (e.g., `@username`).",
-            parse_mode="Markdown",
-            reply_markup=ReplyKeyboardMarkup(
-                [["🚫 Cancel"]], resize_keyboard=True)
+            f"👋 @{user.username or user.first_name}, please start the bot in private:\n"
+            f"https://t.me/{context.bot.username}?start={user.id}"
         )
-
         return
 
-    group_id = update.effective_chat.id if update.effective_chat.type in ("group", "supergroup") else None
+    # If user hasn't set Twitter handle
+    if not user_data.get("twitter_handle"):
+        if chat.type != "private":
+            # Send message in group telling user to go to DM
+            await update.message.reply_text(
+                f"❗️@{user.username or user.first_name}, to join raids, please message the bot privately first:\n"
+                f"👉 [Click here to set your Twitter handle](https://t.me/{context.bot.username}?start={user.id})\n\n"
+                f"Then tap *🔥 Ongoing Raids* to continue.",
+                parse_mode="Markdown",
+                disable_web_page_preview=True
+            )
+            return
+        else:
+            # Ask for handle in private chat
+            context.user_data["awaiting_twitter"] = True
+            await update.message.reply_text(
+                "📮 Please send your Twitter handle (e.g., `@username`).",
+                parse_mode="Markdown",
+                reply_markup=ReplyKeyboardMarkup(
+                    [["🚫 Cancel"]], resize_keyboard=True
+                )
+            )
+            return
+
+    # Continue with showing raids
+    group_id = chat.id if chat.type in ("group", "supergroup") else None
     posts = get_recent_approved_posts(group_id=group_id, with_time=True)
 
     if not posts:
@@ -549,7 +571,6 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
             now = datetime.utcnow()
             time_left = expires_at - now
 
-            # Format time left nicely
             hours_left = int(time_left.total_seconds() // 3600)
             minutes_left = int((time_left.total_seconds() % 3600) // 60)
             time_left_str = f"{hours_left}h {minutes_left}m left"
@@ -559,10 +580,9 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
                 keyboard = None
             else:
                 status = "❌ You haven’t joined this raid yet."
-                keyboard = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(
-                        "✅ Done", callback_data=f"done|{post_id}")
-                ]])
+                keyboard = InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✅ Done", callback_data=f"done|{post_id}")]
+                ])
 
             await update.message.reply_text(
                 f"🔥 *New Raid by {name}*\n"
