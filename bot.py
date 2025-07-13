@@ -537,7 +537,9 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
 
         return
 
-    posts = get_recent_approved_posts(with_time=True)
+    group_id = update.effective_chat.id if update.effective_chat.type in ("group", "supergroup") else None
+    posts = get_recent_approved_posts(group_id=group_id, with_time=True)
+
     if not posts:
         await update.message.reply_text("🚫 No active raids in the last 24 hours.")
     else:
@@ -644,8 +646,14 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             return
 
         # Save the post and update last post time
-        save_post(user.id, text)
-        update_last_post_time(user.id)  # Add this line
+        # Determine group ID if submission is from a group
+        chat = update.effective_chat
+        group_id = chat.id if chat.type in ("group", "supergroup") else None
+
+        # Save the post with group_id
+        save_post(user.id, text, group_id=group_id)
+        update_last_post_time(user.id)
+
         context.user_data["awaiting_post"] = False
 
         await update.message.reply_text(
@@ -791,39 +799,39 @@ async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 def main():
     """Start the bot"""
     app = ApplicationBuilder().token(API_KEY).build()
-    app.add_handler(CallbackQueryHandler(
-        handle_callback_buttons, pattern=r"^(vconfirm|vreject)\|"))
+
     run_background_jobs()
-    # Command handlers
+
+    # ─────────────── CALLBACK HANDLERS ───────────────
     app.add_handler(CallbackQueryHandler(
-        handle_callback_buttons, pattern=r"^confirm_twitter\|"))
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("review", review_posts))
-    app.add_handler(CallbackQueryHandler(
-        admin_callback, pattern=r"^(approve|reject)\|"))
+        handle_callback_buttons, pattern=r"^(confirm_twitter|responses|vconfirm|vreject)\|"))
     app.add_handler(CallbackQueryHandler(
         handle_raid_participation, pattern=r"^done\|"))
-    app.add_handler(MessageHandler(filters.TEXT & filters.Regex(
-        "^📊 My Ongoing Raids$"), handle_my_ongoing_raids))
     app.add_handler(CallbackQueryHandler(
-        handle_view_responses, pattern=r"^responses\|"))
-    app.add_handler(CallbackQueryHandler(handle_callback_buttons))  # Catch all
-    app.add_handler(CallbackQueryHandler(
-        handle_callback_buttons, pattern=r"^(vconfirm|vreject)\|"))
+        admin_callback, pattern=r"^(approve|reject)\|"))
+    app.add_handler(CallbackQueryHandler(handle_callback_buttons))  # catch-all fallback
 
-    # Message handler
+    # ─────────────── COMMAND HANDLERS (group + private) ───────────────
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("review", review_posts))
+    app.add_handler(CommandHandler("slots", handle_slots))
+    app.add_handler(CommandHandler("profile", handle_profile))
+    app.add_handler(CommandHandler("post", handle_post_submission))
+    app.add_handler(CommandHandler("referrals", handle_referrals))
+    app.add_handler(CommandHandler("support", handle_support))
+    app.add_handler(CommandHandler("contacts", handle_contacts))
+    app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
+    app.add_handler(CommandHandler("my_raids", handle_my_ongoing_raids))  # optional
 
-
-# Handle normal messages ONLY in private chats
-    app.add_handler(
-        MessageHandler(
-            filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
-            handle_message_buttons
-        )
-    )
+    # ─────────────── TEXT BUTTON HANDLERS (private chats only) ───────────────
+    app.add_handler(MessageHandler(
+        filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
+        handle_message_buttons
+    ))
 
     logger.info("🤖 Bot is running...")
     app.run_polling()
+
 
 
 if __name__ == "__main__":

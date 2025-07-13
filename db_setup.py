@@ -42,6 +42,7 @@ def create_database():
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
             telegram_id   INTEGER REFERENCES users(telegram_id),
             post_link     TEXT,
+            group_id      INTEGER,
             status        TEXT DEFAULT 'pending',
             submitted_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             approved_at   TIMESTAMP,

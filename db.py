@@ -236,7 +236,7 @@ def save_post(telegram_id: int, post_link: str):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute(
-        "INSERT INTO posts (telegram_id, post_link) VALUES (?, ?)",
+        "INSERT INTO posts (telegram_id, post_link, group_id, status) VALUES (?, ?)",
         (telegram_id, post_link)
     )
     c.execute(
@@ -287,27 +287,37 @@ def set_post_status(post_id: int, status: str):
     conn.close()
 
 
-def get_recent_approved_posts(hours: int = 24, with_time=False):
+def get_recent_approved_posts(group_id=None, hours: int = 24, with_time=False):
     since = datetime.utcnow() - timedelta(hours=hours)
     conn = sqlite3.connect(DB_FILE)
+
     if with_time:
-        rows = conn.execute("""
+        query = """
             SELECT p.id, p.post_link, u.name, p.approved_at
             FROM posts p
             JOIN users u ON p.telegram_id = u.telegram_id
             WHERE p.status = 'approved' AND p.approved_at >= ?
-            ORDER BY p.submitted_at DESC
-        """, (since,)).fetchall()
+        """
     else:
-        rows = conn.execute("""
+        query = """
             SELECT p.id, p.post_link, u.name
             FROM posts p
             JOIN users u ON p.telegram_id = u.telegram_id
             WHERE p.status = 'approved' AND p.approved_at >= ?
-            ORDER BY p.submitted_at DESC
-        """, (since,)).fetchall()
+        """
+
+    params = [since]
+
+    if group_id:
+        query += " AND p.group_id = ?"
+        params.append(group_id)
+
+    query += " ORDER BY p.submitted_at DESC"
+
+    rows = conn.execute(query, params).fetchall()
     conn.close()
     return rows
+
 
 
 def get_post_owner_id(post_id: int) -> int | None:
