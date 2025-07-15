@@ -658,19 +658,8 @@ async def handle_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle post submission"""
     user = update.effective_user
-    chat = update.effective_chat
+    user_data = get_user(user.id)
 
-    # 🔐 Only allow in private chat
-    if chat.type != "private":
-        await update.message.reply_text(
-            "📬 Please send /post in a private chat with me to submit your tweet for review.\n"
-            f"👉 [Start Here](https://t.me/{BOT_USERNAME})",
-            parse_mode="Markdown",
-            disable_web_page_preview=True
-        )
-        return
-
-    # Check if banned from posting
     if is_user_banned(user.id):
         await update.message.reply_text(
             "⛔ You are temporarily banned from posting due to unverified raids.\n"
@@ -679,7 +668,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-    # Step 1: If user already clicked 📤 Post and is now sending a link
+    # User is submitting a post link
     if context.user_data.get("awaiting_post"):
         text = update.message.text.strip()
 
@@ -691,9 +680,10 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Enforce cooldown
+        # Check cooldown - moved this to a separate function
         cooldown_hours = 12
         in_cooldown, remaining = is_in_cooldown(user.id, cooldown_hours)
+
         if in_cooldown:
             await update.message.reply_text(
                 f"⏳ You can only submit one post every {cooldown_hours} hours.\n"
@@ -701,15 +691,15 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Optional: Fetch group ID for context, default to None
-        try:
-            group_id = get_user_group(user.id)  # Ensure this function exists
-        except:
-            group_id = None
+        # Save the post and update last post time
+        # Determine group ID if submission is from a group
+        chat = update.effective_chat
+        group_id = chat.id if chat.type in ("group", "supergroup") else None
 
-        # Save post
+        # Save the post with group_id
         save_post(user.id, text, group_id=group_id)
         update_last_post_time(user.id)
+
         context.user_data["awaiting_post"] = False
 
         await update.message.reply_text(
@@ -727,8 +717,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
         return
 
-    # Step 2: First-time tap on "📤 Post" or /post command
-    context.user_data["awaiting_post"] = True
+    # First-time call to /post or menu button
     await update.message.reply_text(
         "📤 *Submit your Twitter/X post link for review:*\n\n"
         "🔗 Please paste a *valid Twitter (twitter.com) or X (x.com) post link* below.\n"
@@ -736,6 +725,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode="Markdown",
         reply_markup=cancel_kbd()
     )
+    context.user_data["awaiting_post"] = True
 
 
 async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
