@@ -531,13 +531,17 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         await handle_stats_backup(update, context)
 
     elif context.user_data.get("awaiting_post"):
+        # The user just sent a tweet link after tapping "📤 Post"
         await handle_post_submission(update, context)
 
     else:
+        # Catch-all for unrecognized inputs
+        context.user_data["awaiting_post"] = False  # Optional safety
         await update.message.reply_text(
             "❓ I didn't understand that. Choose an option:",
             reply_markup=main_kbd(user.id)
         )
+
 
 # ──────────────────────── HANDLER HELPERS ────────────────────
 
