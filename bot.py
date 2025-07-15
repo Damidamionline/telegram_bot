@@ -494,29 +494,50 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 
     elif txt == "🔥 Ongoing Raids":
         await handle_ongoing_raids(update, context)
+
     elif txt == "🎯 Slots":
         await handle_slots(update, context)
+
     elif txt == "📤 Post":
-        await handle_post_submission(update, context)
+        context.user_data["awaiting_post"] = True
+        await update.message.reply_text(
+            "📤 *Submit your Twitter/X post link for review:*\n\n"
+            "🔗 Please paste a *valid Twitter (twitter.com) or X (x.com) post link* below.\n"
+            "Example: https://x.com/Web3Kaiju/status/1901622919777652813",
+            parse_mode="Markdown",
+            reply_markup=cancel_kbd()
+        )
+        return
+
     elif txt == "📨 Invite Friends":
         await handle_referrals(update, context)
+
     elif txt == "🎧 Support":
         await handle_support(update, context)
+
     elif txt == "📱 Contacts":
         await handle_contacts(update, context)
+
     elif txt == "🛠️ Review Posts":
         await review_posts(update, context)
+
     elif txt == "🚫 Cancel":
         await handle_cancel(update, context)
+
     elif txt == "👤 Profile":
         await handle_profile(update, context)
+
     elif txt == "📊 Stats":
         await handle_stats_backup(update, context)
+
     elif context.user_data.get("awaiting_post"):
         await handle_post_submission(update, context)
 
     else:
-        await update.message.reply_text("❓ I didn't understand that. Choose an option:", reply_markup=main_kbd(user.id))
+        await update.message.reply_text(
+            "❓ I didn't understand that. Choose an option:",
+            reply_markup=main_kbd(user.id)
+        )
 
 # ──────────────────────── HANDLER HELPERS ────────────────────
 
@@ -581,7 +602,8 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
             else:
                 status = "❌ You haven’t joined this raid yet."
                 keyboard = InlineKeyboardMarkup([
-                    [InlineKeyboardButton("✅ Done", callback_data=f"done|{post_id}")]
+                    [InlineKeyboardButton(
+                        "✅ Done", callback_data=f"done|{post_id}")]
                 ])
 
             await update.message.reply_text(
@@ -632,8 +654,19 @@ async def handle_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle post submission"""
     user = update.effective_user
-    user_data = get_user(user.id)
+    chat = update.effective_chat
 
+    # 🔐 Only allow in private chat
+    if chat.type != "private":
+        await update.message.reply_text(
+            "📬 Please send /post in a private chat with me to submit your tweet for review.\n"
+            f"👉 [Start Here](https://t.me/{BOT_USERNAME})",
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+        return
+
+    # Check if banned from posting
     if is_user_banned(user.id):
         await update.message.reply_text(
             "⛔ You are temporarily banned from posting due to unverified raids.\n"
@@ -642,7 +675,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-    # User is submitting a post link
+    # Step 1: If user already clicked 📤 Post and is now sending a link
     if context.user_data.get("awaiting_post"):
         text = update.message.text.strip()
 
@@ -654,10 +687,9 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Check cooldown - moved this to a separate function
+        # Enforce cooldown
         cooldown_hours = 12
         in_cooldown, remaining = is_in_cooldown(user.id, cooldown_hours)
-
         if in_cooldown:
             await update.message.reply_text(
                 f"⏳ You can only submit one post every {cooldown_hours} hours.\n"
@@ -665,15 +697,15 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Save the post and update last post time
-        # Determine group ID if submission is from a group
-        chat = update.effective_chat
-        group_id = chat.id if chat.type in ("group", "supergroup") else None
+        # Optional: Fetch group ID for context, default to None
+        try:
+            group_id = get_user_group(user.id)  # Ensure this function exists
+        except:
+            group_id = None
 
-        # Save the post with group_id
+        # Save post
         save_post(user.id, text, group_id=group_id)
         update_last_post_time(user.id)
-
         context.user_data["awaiting_post"] = False
 
         await update.message.reply_text(
@@ -691,7 +723,8 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
         return
 
-    # First-time call to /post or menu button
+    # Step 2: First-time tap on "📤 Post" or /post command
+    context.user_data["awaiting_post"] = True
     await update.message.reply_text(
         "📤 *Submit your Twitter/X post link for review:*\n\n"
         "🔗 Please paste a *valid Twitter (twitter.com) or X (x.com) post link* below.\n"
@@ -699,7 +732,6 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         parse_mode="Markdown",
         reply_markup=cancel_kbd()
     )
-    context.user_data["awaiting_post"] = True
 
 
 async def handle_stats_backup(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -829,7 +861,8 @@ def main():
         handle_raid_participation, pattern=r"^done\|"))
     app.add_handler(CallbackQueryHandler(
         admin_callback, pattern=r"^(approve|reject)\|"))
-    app.add_handler(CallbackQueryHandler(handle_callback_buttons))  # catch-all fallback
+    app.add_handler(CallbackQueryHandler(
+        handle_callback_buttons))  # catch-all fallback
 
     # ─────────────── COMMAND HANDLERS (group + private) ───────────────
     app.add_handler(CommandHandler("start", start))
@@ -841,7 +874,8 @@ def main():
     app.add_handler(CommandHandler("support", handle_support))
     app.add_handler(CommandHandler("contacts", handle_contacts))
     app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
-    app.add_handler(CommandHandler("my_raids", handle_my_ongoing_raids))  # optional
+    app.add_handler(CommandHandler(
+        "my_raids", handle_my_ongoing_raids))  # optional
 
     # ─────────────── TEXT BUTTON HANDLERS (private chats only) ───────────────
     app.add_handler(MessageHandler(
@@ -851,7 +885,6 @@ def main():
 
     logger.info("🤖 Bot is running...")
     app.run_polling()
-
 
 
 if __name__ == "__main__":
