@@ -660,6 +660,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
     user = update.effective_user
     user_data = get_user(user.id)
 
+    # 🔒 Check if user is banned from posting
     if is_user_banned(user.id):
         await update.message.reply_text(
             "⛔ You are temporarily banned from posting due to unverified raids.\n"
@@ -668,10 +669,11 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         )
         return
 
-    # User is submitting a post link
+    # 📨 User is submitting a tweet link
     if context.user_data.get("awaiting_post"):
         text = update.message.text.strip()
 
+        # 🔗 Validate tweet link
         if not is_valid_tweet_link(text):
             await update.message.reply_text(
                 "❌ Invalid tweet link. Only links from *twitter.com* or *x.com* are allowed.\n"
@@ -680,10 +682,9 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Check cooldown - moved this to a separate function
+        # ⏳ Check 12-hour cooldown
         cooldown_hours = 12
         in_cooldown, remaining = is_in_cooldown(user.id, cooldown_hours)
-
         if in_cooldown:
             await update.message.reply_text(
                 f"⏳ You can only submit one post every {cooldown_hours} hours.\n"
@@ -691,31 +692,35 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             )
             return
 
-        # Save the post and update last post time
-        # Determine group ID if submission is from a group
+        # 💾 Save the post
         chat = update.effective_chat
         group_id = chat.id if chat.type in ("group", "supergroup") else None
-
-        # Save the post with group_id
         save_post(user.id, text, group_id=group_id)
         update_last_post_time(user.id)
-
         context.user_data["awaiting_post"] = False
 
+        # ✅ Notify user
         await update.message.reply_text(
             "✅ Your post has been submitted for review. You'll be notified when it's approved.",
-            reply_markup=main_kbd(user.id)
+            reply_markup=main_kbd(user.id),
         )
 
-        # Notify admins
+        # 📢 Notify admins
         name = user.full_name
         for admin_id in ADMINS:
-            await context.bot.send_message(
-                admin_id,
-                f"📬 New post submitted by *{name}*:\n{text}",
-                parse_mode="Markdown"
-            )
-        return
+            try:
+                await context.bot.send_message(
+                    chat_id=admin_id,
+                    text=f"📬 New post submitted by *{name}*:\n{text}",
+                    parse_mode="Markdown"
+                )
+            except Exception as e:
+                print(f"[ADMIN NOTIFY ERROR] Admin ID: {admin_id} - {e}")
+
+
+async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    context.user_data["awaiting_post"] = True
+    await update.message.reply_text("📨 Please send the Twitter/X post link you'd like to submit.")
 
     # First-time call to /post or menu button
     await update.message.reply_text(
@@ -867,6 +872,7 @@ def main():
     app.add_handler(CommandHandler("referrals", handle_referrals))
     app.add_handler(CommandHandler("support", handle_support))
     app.add_handler(CommandHandler("contacts", handle_contacts))
+    app.add_handler(CommandHandler("post", post_command))
     app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
     app.add_handler(CommandHandler(
         "my_raids", handle_my_ongoing_raids))  # optional
