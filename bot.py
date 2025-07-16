@@ -507,7 +507,6 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown",
             reply_markup=cancel_kbd()
         )
-        return
 
     elif txt == "📨 Invite Friends":
         await handle_referrals(update, context)
@@ -532,7 +531,6 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 
     elif txt == "📊 Stats":
         await handle_stats_backup(update, context)
-
 
     else:
         # Catch-all for unrecognized inputs
