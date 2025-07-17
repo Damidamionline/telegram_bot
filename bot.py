@@ -170,6 +170,25 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 # ─── handle_post_submission ─────────────────────────────
 
 
+async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle admin Approve / Reject buttons."""
+    query = update.callback_query
+    await query.answer()  # Acknowledge callback
+
+    data = query.data  # e.g. "approve_123" or "reject_123"
+    action, post_id_str = data.split("_", 1)
+    post_id = int(post_id_str)
+
+    if action == "approve":
+        set_post_status(post_id, approved=True)
+        await query.edit_message_text(f"✅ Post #{post_id} approved.")
+    else:
+        set_post_status(post_id, approved=False)
+        await query.edit_message_text(f"❌ Post #{post_id} rejected.")
+
+    # (Optionally notify the post owner here)
+
+
 async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
     text = update.message.text.strip()
