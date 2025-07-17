@@ -678,6 +678,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown"
         )
         return
+    
 
     # ⏳ Check 12-hour cooldown
     cooldown_hours = 12
@@ -692,7 +693,9 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
     # 💾 Save the post
     chat = update.effective_chat
     group_id = chat.id if chat.type in ("group", "supergroup") else None
+    print("✅ About to save post")
     save_post(user.id, text, group_id=group_id)
+    print("✅ Post saved")
     update_last_post_time(user.id)
     context.user_data["awaiting_post"] = False
 

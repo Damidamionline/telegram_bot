@@ -319,7 +319,6 @@ def get_recent_approved_posts(group_id=None, hours: int = 24, with_time=False):
     return rows
 
 
-
 def get_post_owner_id(post_id: int) -> int | None:
     conn = sqlite3.connect(DB_FILE)
     row = conn.execute(
