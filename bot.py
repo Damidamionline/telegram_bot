@@ -869,7 +869,6 @@ def main():
     app.add_handler(CommandHandler("referrals", handle_referrals))
     app.add_handler(CommandHandler("support", handle_support))
     app.add_handler(CommandHandler("contacts", handle_contacts))
-    app.add_handler(CommandHandler("post", post_command))
     app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
     app.add_handler(CommandHandler(
         "my_raids", handle_my_ongoing_raids))  # optional
