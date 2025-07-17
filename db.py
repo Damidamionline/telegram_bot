@@ -232,12 +232,12 @@ def mark_post_completed(telegram_id: int, post_id: int):
 # ───── Posts ─────────────────────────────────────────────
 
 
-def save_post(telegram_id: int, post_link: str):
+def save_post(telegram_id: int, post_link: str, group_id: int = None):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
     c.execute(
-        "INSERT INTO posts (telegram_id, post_link, group_id, status) VALUES (?, ?)",
-        (telegram_id, post_link)
+        "INSERT INTO posts (telegram_id, post_link, group_id, status) VALUES (?, ?, ?, ?)",
+        (telegram_id, post_link, group_id, "pending")
     )
     c.execute(
         "UPDATE users SET last_post_at = ? WHERE telegram_id = ?",
