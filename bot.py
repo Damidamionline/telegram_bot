@@ -20,6 +20,8 @@ from telegram.ext import (
     ContextTypes,
     filters
 )
+from telegram.constants import ParseMode
+import html
 from functools import partial
 from apscheduler.schedulers.background import BackgroundScheduler
 from dotenv import load_dotenv
@@ -132,6 +134,10 @@ def main_kbd(user_id: int | None = None) -> ReplyKeyboardMarkup:
 def cancel_kbd() -> ReplyKeyboardMarkup:
     """Cancel action keyboard"""
     return ReplyKeyboardMarkup([["🚫 Cancel"]], resize_keyboard=True)
+
+
+def escape_markdown(text):
+    return re.sub(r'([*_`\[\]])', r'\\\1', text)
 
 
 async def send_daily_reminder(context: ContextTypes.DEFAULT_TYPE):
@@ -532,6 +538,9 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
     elif txt == "📊 Stats":
         await handle_stats_backup(update, context)
 
+    elif txt == "📊 My Ongoing Raids":
+        await handle_my_ongoing_raids(update, context)
+
     else:
         # Catch-all for unrecognized inputs
         context.user_data["awaiting_post"] = False  # Optional safety
@@ -543,7 +552,6 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 
 # ──────────────────────── HANDLER HELPERS ────────────────────
 
-
 async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle ongoing raids display"""
     user = update.effective_user
@@ -551,33 +559,34 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
     user_data = get_user(user.id)
 
     if not user_data:
+        username = html.escape(user.username or user.first_name)
         await update.message.reply_text(
-            f"👋 @{user.username or user.first_name}, please start the bot in private:\n"
-            f"https://t.me/{context.bot.username}?start={user.id}"
+            f"👋 <b>@{username}</b>, please start the bot in private:<br>"
+            f"<a href='https://t.me/{context.bot.username}?start={user.id}'>Click here</a>",
+            parse_mode=ParseMode.HTML,
+            disable_web_page_preview=True
         )
         return
 
     # If user hasn't set Twitter handle
     if not user_data.get("twitter_handle"):
         if chat.type != "private":
-            # Send message in group telling user to go to DM
+            username = html.escape(user.username or user.first_name)
             await update.message.reply_text(
-                f"❗️@{user.username or user.first_name}, to join raids, please message the bot privately first:\n"
-                f"👉 [Click here to set your Twitter handle](https://t.me/{context.bot.username}?start={user.id})\n\n"
-                f"Then tap *🔥 Ongoing Raids* to continue.",
-                parse_mode="Markdown",
+                f"❗️<b>@{username}</b>, to join raids, please message the bot privately first:<br>"
+                f"👉 <a href='https://t.me/{context.bot.username}?start={user.id}'>Click here to set your Twitter handle</a><br><br>"
+                f"Then tap <b>🔥 Ongoing Raids</b> to continue.",
+                parse_mode=ParseMode.HTML,
                 disable_web_page_preview=True
             )
             return
         else:
-            # Ask for handle in private chat
             context.user_data["awaiting_twitter"] = True
             await update.message.reply_text(
-                "📮 Please send your Twitter handle (e.g., `@username`).",
-                parse_mode="Markdown",
+                "📮 Please send your Twitter handle (e.g., <code>@username</code>).",
+                parse_mode=ParseMode.HTML,
                 reply_markup=ReplyKeyboardMarkup(
-                    [["🚫 Cancel"]], resize_keyboard=True
-                )
+                    [["🚫 Cancel"]], resize_keyboard=True)
             )
             return
 
@@ -589,10 +598,20 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
         await update.message.reply_text("🚫 No active raids in the last 24 hours.")
     else:
         for post_id, post_link, name, approved_at_str in posts:
-            approved_at = datetime.fromisoformat(approved_at_str)
+            try:
+                approved_at = datetime.fromisoformat(approved_at_str)
+                if approved_at.tzinfo is None:
+                    approved_at = approved_at.replace(tzinfo=timezone.utc)
+            except Exception:
+                await update.message.reply_text(f"⚠️ Skipping a post due to time error: {approved_at_str}")
+                continue
+
             expires_at = approved_at + timedelta(hours=24)
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             time_left = expires_at - now
+
+            if time_left.total_seconds() <= 0:
+                continue  # Skip expired
 
             hours_left = int(time_left.total_seconds() // 3600)
             minutes_left = int((time_left.total_seconds() % 3600) // 60)
@@ -608,12 +627,15 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
                         "✅ Done", callback_data=f"done|{post_id}")]
                 ])
 
+            escaped_name = html.escape(name)
+            escaped_link = html.escape(post_link)
+
             await update.message.reply_text(
-                f"🔥 *New Raid by {name}*\n"
-                f"🔗 {post_link}\n\n"
-                f"{status}\n🕒 *Time Left:* {time_left_str}",
+                f"🔥 <b>New Raid by {name}</b>\n\n"
+                f"🔗 <a href=\"{post_link}\">{post_link}</a>\n\n"
+                f"{status}\n🕒 <b>Time Left:</b> {time_left_str}",
                 reply_markup=keyboard,
-                parse_mode="Markdown",
+                parse_mode="HTML",
                 disable_web_page_preview=True
             )
 
@@ -678,7 +700,6 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             parse_mode="Markdown"
         )
         return
-    
 
     # ⏳ Check 12-hour cooldown
     cooldown_hours = 12
