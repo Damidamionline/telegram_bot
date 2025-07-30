@@ -188,6 +188,55 @@ def deduct_slot_by_admin(telegram_id: int) -> bool:
     return False
 
 
+def create_follow_action(follower_id: int, followed_id: int):
+    """Log a follow action between users."""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        INSERT INTO follow_actions (follower_id, followed_id)
+        VALUES (?, ?)
+    """, (follower_id, followed_id))
+    conn.commit()
+    conn.close()
+
+
+def confirm_follow_back(followed_id: int, follower_id: int):
+    """Mark the follow as confirmed (mutual)"""
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        UPDATE follow_actions
+        SET confirmed = 1
+        WHERE follower_id = ? AND followed_id = ?
+    """, (follower_id, followed_id))
+    conn.commit()
+    conn.close()
+
+
+def ignore_follow(followed_id: int, follower_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        UPDATE follow_actions
+        SET responded = 1
+        WHERE follower_id = ? AND followed_id = ?
+    """, (follower_id, followed_id))
+    conn.commit()
+    conn.close()
+
+
+def get_pending_followers(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    rows = conn.execute("""
+        SELECT f.follower_id, u.name, u.twitter_handle
+        FROM follow_actions f
+        JOIN users u ON f.follower_id = u.telegram_id
+        WHERE f.followed_id = ? AND f.responded = 0
+    """, (user_id,)).fetchall()
+    conn.close()
+    return rows
+
+
 def add_task_slot(telegram_id: int, amount: float):
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
@@ -287,6 +336,51 @@ def set_post_status(post_id: int, status: str):
     conn.close()
 
 
+def join_follow_pool(telegram_id: int, handle: str):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("""
+        INSERT OR REPLACE INTO follow_pool (telegram_id, twitter_handle, joined_at)
+        VALUES (?, ?, ?)
+    """, (telegram_id, handle, datetime.utcnow()))
+    conn.commit()
+    conn.close()
+
+
+def leave_follow_pool(telegram_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("DELETE FROM follow_pool WHERE telegram_id = ?", (telegram_id,))
+    conn.commit()
+    conn.close()
+
+
+def is_in_follow_pool(telegram_id: int) -> bool:
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute("SELECT 1 FROM follow_pool WHERE telegram_id = ?", (telegram_id,))
+    result = c.fetchone()
+    conn.close()
+    return bool(result)
+
+
+def get_follow_suggestions(telegram_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("""
+        SELECT u.telegram_id, u.name, u.twitter_handle
+        FROM follow_pool p
+        JOIN users u ON p.telegram_id = u.telegram_id
+        WHERE p.telegram_id != ?
+        AND p.telegram_id NOT IN (
+            SELECT followed_id FROM follow_actions WHERE follower_id = ?
+        )
+        ORDER BY p.joined_at
+    """, (telegram_id, telegram_id)).fetchall()
+    conn.close()
+    return [dict(row) for row in rows]
+
+
 def get_recent_approved_posts(group_id=None, hours: int = 24, with_time=False):
     since = datetime.utcnow() - timedelta(hours=hours)
     conn = sqlite3.connect(DB_FILE)
@@ -317,6 +411,26 @@ def get_recent_approved_posts(group_id=None, hours: int = 24, with_time=False):
     rows = conn.execute(query, params).fetchall()
     conn.close()
     return rows
+
+
+def count_followers(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM follow_actions WHERE followed_id = ?", (user_id,))
+    count = c.fetchone()[0]
+    conn.close()
+    return count
+
+
+def count_follow_backs(user_id: int):
+    conn = sqlite3.connect(DB_FILE)
+    c = conn.cursor()
+    c.execute(
+        "SELECT COUNT(*) FROM follow_actions WHERE followed_id = ? AND confirmed = 1", (user_id,))
+    count = c.fetchone()[0]
+    conn.close()
+    return count
 
 
 def get_post_owner_id(post_id: int) -> int | None:

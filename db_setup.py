@@ -8,7 +8,7 @@ def create_database():
     conn = sqlite3.connect(DB_FILE)
     c = conn.cursor()
 
-    # ───── Create users table ─────
+    # ───── users table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
             telegram_id      INTEGER PRIMARY KEY,
@@ -20,23 +20,13 @@ def create_database():
             twitter_handle   TEXT UNIQUE,
             created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_updated     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            banned_until     TIMESTAMP
+            banned_until     TIMESTAMP,
+            post_ban_until   TIMESTAMP,
+            last_post_at     TIMESTAMP
         )
     """)
 
-    # ───── Add any missing columns ─────
-    c.execute("PRAGMA table_info(users)")
-    existing_columns = {col[1] for col in c.fetchall()}
-
-    if "post_ban_until" not in existing_columns:
-        c.execute("ALTER TABLE users ADD COLUMN post_ban_until TIMESTAMP")
-        print("✅ Added missing column to users: post_ban_until")
-
-    if "last_post_at" not in existing_columns:
-        c.execute("ALTER TABLE users ADD COLUMN last_post_at TIMESTAMP")
-        print("✅ Added missing column to users: last_post_at")
-
-    # ───── posts ───────────────────────────────────────────────
+    # ───── posts table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS posts (
             id            INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -51,7 +41,7 @@ def create_database():
         )
     """)
 
-    # ───── slot_logs ────────────────────────────────────────────
+    # ───── slot_logs table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS slot_logs (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -64,7 +54,7 @@ def create_database():
         )
     """)
 
-    # ───── completions ─────────────────────────────────────────
+    # ───── completions table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS completions (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -77,7 +67,7 @@ def create_database():
         )
     """)
 
-# ───── verifications ────────────────────────────────────────
+    # ───── verifications table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS verifications (
             id           INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -92,7 +82,30 @@ def create_database():
         )
     """)
 
-    # ───── Indexes ─────────────────────────────────────────────
+    # ───── follow_actions table ─────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS follow_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            follower_id INTEGER,
+            followed_id INTEGER,
+            confirmed INTEGER DEFAULT 0,
+            responded INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (follower_id) REFERENCES users(telegram_id),
+            FOREIGN KEY (followed_id) REFERENCES users(telegram_id)
+        )
+    """)
+
+    # ───── follow_pool table ─────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS follow_pool (
+            telegram_id INTEGER PRIMARY KEY,
+            twitter_handle TEXT,
+            joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # ───── indexes ─────
     c.execute(
         "CREATE INDEX IF NOT EXISTS idx_users_telegram_id ON users(telegram_id)")
     c.execute("CREATE INDEX IF NOT EXISTS idx_posts_status ON posts(status)")

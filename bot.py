@@ -33,7 +33,9 @@ from db import (
     expire_old_posts, ban_unresponsive_post_owners, is_user_banned, create_verification,
     mark_post_completed, get_post_owner_id, create_verification, mark_post_completed,
     close_verification, auto_approve_stale_posts, is_in_cooldown, get_user_active_posts,
-    get_verifications_for_post, update_last_post_time,
+    get_verifications_for_post, update_last_post_time, is_in_follow_pool, join_follow_pool,
+    leave_follow_pool, get_follow_suggestions, create_follow_action, get_twitter_handle, confirm_follow_back,
+    ignore_follow, count_follow_backs, count_followers
 
 )
 from apscheduler.triggers.cron import CronTrigger
@@ -123,7 +125,7 @@ def main_kbd(user_id: int | None = None) -> ReplyKeyboardMarkup:
         ["🔥 Ongoing Raids"],
         ["🎯 Slots", "📤 Post", "📨 Invite Friends"],
         ["🎧 Support", "📱 Contacts", "👤 Profile"],
-        ["📊 My Ongoing Raids"]
+        ["📊 My Ongoing Raids", "🤝 Follow for Follow"]
 
     ]
     if user_id in ADMINS:
@@ -318,6 +320,177 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         except:
             await query.edit_message_text("❌ Couldn't verify. Try again later.")
 
+    elif data.startswith("followback|"):
+        _, follower_id = data.split("|")
+        follower_id = int(follower_id)
+        followed_id = query.from_user.id
+
+        confirm_follow_back(followed_id, follower_id)
+
+        await query.answer("✅ Follow back recorded!")
+
+        # Notify the follower
+        followed_handle = get_twitter_handle(followed_id)
+        followed_name = query.from_user.first_name
+
+        await context.bot.send_message(
+            chat_id=follower_id,
+            text=(
+                f"🎉 {followed_name} followed you back!\n\n"
+                f"🔗 View their profile: https://x.com/{followed_handle}"
+            )
+        )
+
+        # Confirm to the one who followed back
+        await context.bot.send_message(
+            chat_id=followed_id,
+            text="✅ Thanks for following back!"
+        )
+
+    elif data.startswith("ignorefollow|"):
+        _, follower_id = data.split("|")
+        followed_id = query.from_user.id
+
+        ignore_follow(followed_id, int(follower_id))
+
+        # Notify the follower
+        handle = get_twitter_handle(followed_id)
+        x_profile_url = f"https://x.com/{handle}"
+
+        await context.bot.send_message(
+            chat_id=int(follower_id),
+            text=(
+                f"❌ {handle} ignored your follow request.\n\n"
+                f"If you'd like, you can unfollow them here:\n\n [x.com/{handle}]({x_profile_url})"
+            ),
+            parse_mode="Markdown",
+            disable_web_page_preview=True
+        )
+
+        await query.answer("Ignored.")
+        await query.edit_message_reply_markup(reply_markup=None)
+
+    elif data.startswith("followdone|"):
+        followed_id = int(data.split("|")[1])
+        follower = query.from_user
+        follower_id = follower.id
+
+        if follower_id == followed_id:
+            await query.answer("You can't follow yourself!", show_alert=True)
+            return
+
+        # Save follow action
+        create_follow_action(follower_id, followed_id)
+
+        # Notify the followed user
+        handle = get_twitter_handle(follower_id)
+        name = follower.username or follower.first_name
+        try:
+            await context.bot.send_message(
+                chat_id=followed_id,
+                text=(
+                    f"👤 {name} says they followed you!\n\n"
+                    f"🔗 X Profile: https://x.com/{handle}"
+                ),
+                reply_markup=InlineKeyboardMarkup([
+                    [
+                        InlineKeyboardButton(
+                            "🔁 Follow Back", callback_data=f"followback|{follower_id}"),
+                        InlineKeyboardButton(
+                            "🚫 Ignore", callback_data=f"ignore_follow|{follower_id}")
+                    ]
+                ])
+            )
+        except Exception as e:
+            print(f"❌ Couldn't notify user {followed_id}: {e}")
+
+        # ✅ Edit original message to simple confirmation
+        followed_user = get_user(followed_id)
+        followed_name = followed_user.get("name", "this user")
+
+        await query.edit_message_text(
+            text=f"✅ You followed {followed_name}!",
+        )
+
+        await query.answer("✅ Marked as followed.")
+
+
+async def handle_follow_for_follow(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user = update.effective_user
+    user_data = get_user(user.id)
+
+    if not user_data:
+        await update.message.reply_text("❗ Please start the bot using /start.")
+        return
+
+    twitter_handle = user_data.get("twitter_handle")
+    if not twitter_handle:
+        await update.message.reply_text(
+            "❗ You must set your Twitter handle before joining Follow for Follow.\n"
+            "Please go to your profile to set it first."
+        )
+        return
+
+    if is_in_follow_pool(user.id):
+        suggestions = get_follow_suggestions(user.id)
+        if not suggestions:
+            await update.message.reply_text(
+                "📭 No users available to follow at the moment. Try again later!"
+            )
+            return
+
+        await update.message.reply_text(
+            "📋 *Here are users you can follow:*\n\n"
+            "✅ Follow each one and click Done under their name.",
+            parse_mode="Markdown"
+        )
+
+        for target in suggestions:
+            target_id = target["telegram_id"]
+            target_handle = target.get("twitter_handle", "")
+            target_name = target.get("name", "Unknown")
+
+            # Get stats
+            follow_count = count_followers(target_id)
+            confirmed_count = count_follow_backs(target_id)
+
+            msg = (
+                f"👤 *{target_name}*\n"
+                f"🔗 X Profile: https://x.com/{target_handle}\n"
+                f"📈 Followed by: *{follow_count}* users\n"
+                f"🔁 Followed back: *{confirmed_count}* users\n\n"
+                f"✅ Follow them and click Done below:"
+            )
+
+            await update.message.reply_text(
+                msg,
+                parse_mode="Markdown",
+                disable_web_page_preview=False,
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton(
+                        "✅ Done", callback_data=f"followdone|{target_id}")
+                ]])
+            )
+
+        await update.message.reply_text(
+            "💡 When you're done, you can leave the pool or return to the menu:",
+            reply_markup=ReplyKeyboardMarkup(
+                [["🚫 Leave Pool"], ["🔙 Back to Menu"]], resize_keyboard=True
+            )
+        )
+
+    else:
+        context.user_data["awaiting_f4f_join"] = True
+        await update.message.reply_text(
+            "🤝 Join Follow for Follow pool?\n\n"
+            "You'll be shown Twitter handles of others who also want to grow. "
+            "Follow them and they’ll follow back!\n\n"
+            "✅ Ready to join?",
+            reply_markup=ReplyKeyboardMarkup(
+                [["✅ Join Now"], ["🔙 Back to Menu"]], resize_keyboard=True
+            )
+        )
+
 
 async def handle_my_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user = update.effective_user
@@ -486,10 +659,8 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         context.user_data["pending_handle"] = handle
         context.user_data["awaiting_twitter"] = False
 
-        keyboard = InlineKeyboardMarkup([[
-            InlineKeyboardButton(
-                "✅ Confirm", callback_data=f"confirm_twitter|{handle}")
-        ]])
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(
+            "✅ Confirm", callback_data=f"confirm_twitter|{handle}")]])
         await update.message.reply_text(
             f"⚠️ You entered `@{handle}` as your Twitter handle.\n\n"
             "Please confirm. *You won't be able to change this later.*",
@@ -500,6 +671,34 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
 
     elif txt == "🔥 Ongoing Raids":
         await handle_ongoing_raids(update, context)
+
+    elif txt == "🤝 Follow for Follow":
+        await handle_follow_for_follow(update, context)
+
+    elif txt == "✅ Join Now":
+        user_data = get_user(user.id)
+        if not user_data or not user_data.get("twitter_handle"):
+            await update.message.reply_text(
+                "❗ You must set your Twitter handle first.",
+                reply_markup=main_kbd(user.id)
+            )
+            return
+        join_follow_pool(user.id, user_data["twitter_handle"])
+        context.user_data["awaiting_f4f_join"] = False
+        await update.message.reply_text(
+            "🎉 You’ve joined the Follow for Follow pool!",
+            reply_markup=main_kbd(user.id)
+        )
+
+    elif txt == "🚫 Leave Pool":
+        leave_follow_pool(user.id)
+        await update.message.reply_text(
+            "❌ You’ve left the Follow for Follow pool.",
+            reply_markup=main_kbd(user.id)
+        )
+
+    elif txt == "🔙 Back to Menu":
+        await update.message.reply_text("🔙 Back to main menu.", reply_markup=main_kbd(user.id))
 
     elif txt == "🎯 Slots":
         await handle_slots(update, context)
@@ -541,9 +740,24 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
     elif txt == "📊 My Ongoing Raids":
         await handle_my_ongoing_raids(update, context)
 
+    elif txt == "📥 Pending Followers":
+        pending = get_pending_followers(user.id)
+        if not pending:
+            await update.message.reply_text("📭 No one has followed you recently.")
+        else:
+            for follower_id, name, handle in pending:
+                await update.message.reply_text(
+                    f"👤 @{handle or name} followed you.\nClick below to respond.",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton(
+                            "🔁 Follow Back", callback_data=f"followback|{follower_id}"),
+                        InlineKeyboardButton(
+                            "🚫 Ignore", callback_data=f"ignorefollow|{follower_id}")
+                    ]])
+                )
+
     else:
-        # Catch-all for unrecognized inputs
-        context.user_data["awaiting_post"] = False  # Optional safety
+        context.user_data["awaiting_post"] = False  # optional cleanup
         await update.message.reply_text(
             "❓ I didn't understand that. Choose an option:",
             reply_markup=main_kbd(user.id)
