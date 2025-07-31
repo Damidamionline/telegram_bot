@@ -10,7 +10,7 @@ app.secret_key = os.urandom(24)
 # Twitter API credentials
 TWITTER_API_KEY = "cM1bezvxdcOiZBh9Ta9D6qxe0"
 TWITTER_API_SECRET = "bRA3ExdjS73SDWKoDv58WJPhzbfGcvPWyK5dH38b8zrl09RBJx"
-CALLBACK_URL = "https://telegram-production-8396.up.railway.app/twitter/callback"
+CALLBACK_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/callback"
 
 # Telegram Bot Token
 TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
