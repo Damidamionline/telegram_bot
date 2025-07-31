@@ -3,6 +3,8 @@ import re
 import html
 import pytz
 import logging
+import threading
+from auth_server import app as flask_app
 from pytz import timezone
 from datetime import datetime, timedelta, timezone as dt_timezone
 from functools import partial
@@ -63,6 +65,7 @@ OAUTH_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/connect
 
 
 # ──────────────────────── UTILITIES ─────────────────────────
+
 
 
 def run_background_jobs():
@@ -1083,6 +1086,10 @@ async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop("awaiting_post", None)
     await update.message.reply_text("Back to main menu.", reply_markup=main_kbd(update.effective_user.id))
 
+
+def run_flask():
+    flask_app.run(host="0.0.0.0", port=8080)
+
 # ─────────────────────────── MAIN ────────────────────────────
 
 
@@ -1097,6 +1104,9 @@ def main():
 
     # Configure the job queue scheduler explicitly
     app.job_queue.scheduler.configure(timezone=astimezone(lagos_tz))
+
+    flask_thread = threading.Thread(target=run_flask)
+    flask_thread.start()    
 
     # Run background tasks
     run_background_jobs()
