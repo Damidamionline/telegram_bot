@@ -1,44 +1,48 @@
 import os
 import re
+import html
 import pytz
 import logging
-from datetime import datetime, timedelta, timezone
-from telegram import (
-    Update,
-    InlineKeyboardButton,
-    InlineKeyboardMarkup,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    KeyboardButton
-)
-from telegram.constants import ChatType
-from telegram.ext import (
-    ApplicationBuilder,
-    CommandHandler,
-    MessageHandler,
-    CallbackQueryHandler,
-    ContextTypes,
-    filters
-)
-from telegram.constants import ParseMode
-import html
+from pytz import timezone
+from datetime import datetime, timedelta, timezone as dt_timezone
 from functools import partial
-from apscheduler.schedulers.background import BackgroundScheduler
-from dotenv import load_dotenv
-from db import (
-    get_recent_approved_posts, get_user_stats,
-    add_user, get_user, get_user_slots, save_post, get_pending_posts,
-    set_post_status, deduct_slot_by_admin, expire_old_posts, set_twitter_handle,
-    get_post_link_by_id, has_completed_post, mark_post_completed, add_task_slot,
-    expire_old_posts, ban_unresponsive_post_owners, is_user_banned, create_verification,
-    mark_post_completed, get_post_owner_id, create_verification, mark_post_completed,
-    close_verification, auto_approve_stale_posts, is_in_cooldown, get_user_active_posts,
-    get_verifications_for_post, update_last_post_time, is_in_follow_pool, join_follow_pool,
-    leave_follow_pool, get_follow_suggestions, create_follow_action, get_twitter_handle, confirm_follow_back,
-    ignore_follow, count_follow_backs, count_followers
 
+# Telegram Core
+from telegram import (
+    Update, InlineKeyboardButton, InlineKeyboardMarkup,
+    ReplyKeyboardMarkup, ReplyKeyboardRemove, KeyboardButton
 )
+from telegram.constants import ChatType, ParseMode
+from telegram.helpers import escape_markdown
+
+# Telegram Extensions
+from telegram.ext import (
+    ApplicationBuilder, CommandHandler, MessageHandler,
+    CallbackQueryHandler, ContextTypes, filters, JobQueue
+)
+
+# APScheduler
+from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.util import astimezone
+# Environment
+from dotenv import load_dotenv
+
+# Internal Database Methods
+from db import (
+    get_recent_approved_posts, get_user_stats, add_user, get_user, get_user_slots,
+    save_post, get_pending_posts, set_post_status, deduct_slot_by_admin, expire_old_posts,
+    set_twitter_handle, get_post_link_by_id, has_completed_post, mark_post_completed,
+    add_task_slot, ban_unresponsive_post_owners, is_user_banned, create_verification,
+    get_post_owner_id, close_verification, auto_approve_stale_posts, is_in_cooldown,
+    get_user_active_posts, get_verifications_for_post, update_last_post_time,
+    is_in_follow_pool, join_follow_pool, leave_follow_pool, get_follow_suggestions,
+    create_follow_action, get_twitter_handle, confirm_follow_back, ignore_follow,
+    count_follow_backs, count_followers
+)
+
+
 # Configure logging
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -55,6 +59,8 @@ REQUIRED_GROUP = "@telemtsa"
 SUPPORT_URL = "https://t.me/web3kaijun"
 ADMINS = [6229232611]  # Telegram IDs of admins
 GROUP_ID = -1002828603829
+OAUTH_URL = "https://telegram-production-8396.up.railway.app/twitter/connect"
+
 
 # ──────────────────────── UTILITIES ─────────────────────────
 
@@ -67,7 +73,7 @@ def run_background_jobs():
         func=expire_old_posts,
         trigger="interval",
         hours=1,
-        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=1)
+        next_run_time=datetime.now(dt_timezone.utc) + timedelta(minutes=1)
 
 
     )
@@ -76,7 +82,7 @@ def run_background_jobs():
         func=ban_unresponsive_post_owners,
         trigger="interval",
         hours=1,
-        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=2)
+        next_run_time=datetime.now(dt_timezone.utc) + timedelta(minutes=2)
 
 
     )
@@ -85,7 +91,7 @@ def run_background_jobs():
         partial(auto_approve_stale_posts),
         "interval",
         minutes=10,
-        next_run_time=datetime.now(timezone.utc) + timedelta(minutes=3)
+        next_run_time=datetime.now(dt_timezone.utc) + timedelta(minutes=3)
     )
 
     # DAILY REMINDER AT 10 AM
@@ -144,9 +150,9 @@ def escape_markdown(text):
 
 async def send_daily_reminder(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
-        chat_id=GROUP_CHAT_ID,
+        chat_id=GROUP_ID,
         text="🔔 *Daily Reminder*\n\nDon't forget to complete your raids, submit your posts, and earn engagement slots today! 💰",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 # ────────────────────────── COMMANDS ────────────────────────
@@ -171,7 +177,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(
             "🚀 *Welcome to the Beta Test of this bot*\n\n"
             "To start using this bot, please join our *beta testing group* first.",
-            parse_mode="Markdown",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=keyboard
         )
         return
@@ -197,7 +203,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
     print(update.effective_chat.id)
 
-    await update.message.reply_text(welcome, parse_mode="Markdown")
+    await update.message.reply_text(welcome, parse_mode=ParseMode.MARKDOWN)
     if update.message.chat.type == ChatType.PRIVATE:
         await update.message.reply_text("🔘 Choose an option:", reply_markup=main_kbd(user.id))
 
@@ -247,6 +253,21 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(user_id, "❌ Your post has been rejected.")
         await query.edit_message_text("❌ Post rejected.")
 
+
+async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
+    connect_link = f"{OAUTH_URL}?tg_id={user_id}"
+
+    keyboard = [
+        [InlineKeyboardButton("🔗 Connect Twitter", url=connect_link)]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "Click the button below to connect your Twitter account:",
+        reply_markup=reply_markup
+    )
+
 # ──────────────────────── CALLBACK HANDLERS ─────────────────
 
 
@@ -264,7 +285,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         if success:
             await query.edit_message_text(
                 f"✅ Twitter handle @`{handle}` has been confirmed and saved.",
-                parse_mode="Markdown"
+                parse_mode=ParseMode.MARKDOWN
             )
             # Go back to main menu
             await context.bot.send_message(
@@ -277,7 +298,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
             await query.edit_message_text(
                 f"❌ The handle @`{handle}` is already in use by another user.\n"
                 "Please send a different Twitter handle.",
-                parse_mode="Markdown"
+                parse_mode=ParseMode.MARKDOWN
             )
             context.user_data["awaiting_twitter"] = True
 
@@ -363,7 +384,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
                 f"❌ {handle} ignored your follow request.\n\n"
                 f"If you'd like, you can unfollow them here:\n\n [x.com/{handle}]({x_profile_url})"
             ),
-            parse_mode="Markdown",
+            parse_mode=ParseMode.MARKDOWN,
             disable_web_page_preview=True
         )
 
@@ -442,7 +463,7 @@ async def handle_follow_for_follow(update: Update, context: ContextTypes.DEFAULT
         await update.message.reply_text(
             "📋 *Here are users you can follow:*\n\n"
             "✅ Follow each one and click Done under their name.",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
 
         for target in suggestions:
@@ -454,17 +475,22 @@ async def handle_follow_for_follow(update: Update, context: ContextTypes.DEFAULT
             follow_count = count_followers(target_id)
             confirmed_count = count_follow_backs(target_id)
 
+            # Escape dynamic values
+            target_name_safe = escape_markdown(str(target_name))
+            target_handle_safe = escape_markdown(str(target_handle))
+            follow_count_safe = escape_markdown(str(follow_count))
+            confirmed_count_safe = escape_markdown(str(confirmed_count))
+
             msg = (
-                f"👤 *{target_name}*\n"
-                f"🔗 X Profile: https://x.com/{target_handle}\n"
-                f"📈 Followed by: *{follow_count}* users\n"
-                f"🔁 Followed back: *{confirmed_count}* users\n\n"
+                f"👤 *{target_name_safe}*\n\n"
+                f"🔗 X Profile: https://x.com/{target_handle_safe}\n\n"
+                f"📈 Followed by: *{follow_count_safe}* users\n"
+                f"🔁 Followed back: *{confirmed_count_safe}* users\n\n"
                 f"✅ Follow them and click Done below:"
             )
-
             await update.message.reply_text(
                 msg,
-                parse_mode="Markdown",
+                parse_mode=ParseMode.MARKDOWN,
                 disable_web_page_preview=False,
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton(
@@ -514,7 +540,7 @@ async def handle_my_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_
 
         await update.message.reply_text(
             f"🧵 *Your Raid*\n🔗 {post_link}\n⏳ Time left: {hours}h {minutes}m",
-            parse_mode="Markdown",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=keyboard,
             disable_web_page_preview=True
         )
@@ -642,34 +668,7 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
     txt = update.message.text.strip()
     user = update.effective_user
 
-    if context.user_data.get("awaiting_twitter"):
-        if txt == "🚫 Cancel":
-            context.user_data["awaiting_twitter"] = False
-            await update.message.reply_text(
-                "🚫 Twitter handle setup cancelled.",
-                reply_markup=ReplyKeyboardRemove()
-            )
-            await update.message.reply_text(
-                "🔙 Back to main menu.",
-                reply_markup=main_kbd(user.id)
-            )
-            return
-
-        handle = txt.strip().lstrip("@")
-        context.user_data["pending_handle"] = handle
-        context.user_data["awaiting_twitter"] = False
-
-        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton(
-            "✅ Confirm", callback_data=f"confirm_twitter|{handle}")]])
-        await update.message.reply_text(
-            f"⚠️ You entered `@{handle}` as your Twitter handle.\n\n"
-            "Please confirm. *You won't be able to change this later.*",
-            parse_mode="Markdown",
-            reply_markup=keyboard
-        )
-        return
-
-    elif txt == "🔥 Ongoing Raids":
+    if txt == "🔥 Ongoing Raids":
         await handle_ongoing_raids(update, context)
 
     elif txt == "🤝 Follow for Follow":
@@ -679,10 +678,15 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
         user_data = get_user(user.id)
         if not user_data or not user_data.get("twitter_handle"):
             await update.message.reply_text(
-                "❗ You must set your Twitter handle first.",
-                reply_markup=main_kbd(user.id)
+                "❗ You must connect your Twitter account before joining Follow for Follow.\n\n"
+                "🔗 Tap below to connect:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
+                ])
             )
             return
+
         join_follow_pool(user.id, user_data["twitter_handle"])
         context.user_data["awaiting_f4f_join"] = False
         await update.message.reply_text(
@@ -709,7 +713,7 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
             "📤 *Submit your Twitter/X post link for review:*\n\n"
             "🔗 Please paste a *valid Twitter (twitter.com) or X (x.com) post link* below.\n"
             "Example: https://x.com/Web3Kaiju/status/1901622919777652813",
-            parse_mode="Markdown",
+            parse_mode=ParseMode.MARKDOWN,
             reply_markup=cancel_kbd()
         )
 
@@ -795,12 +799,12 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
             )
             return
         else:
-            context.user_data["awaiting_twitter"] = True
             await update.message.reply_text(
-                "📮 Please send your Twitter handle (e.g., <code>@username</code>).",
-                parse_mode=ParseMode.HTML,
-                reply_markup=ReplyKeyboardMarkup(
-                    [["🚫 Cancel"]], resize_keyboard=True)
+                "🐦 To join raids, please connect your Twitter account first:",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton(
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
+                ])
             )
             return
 
@@ -815,13 +819,13 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
             try:
                 approved_at = datetime.fromisoformat(approved_at_str)
                 if approved_at.tzinfo is None:
-                    approved_at = approved_at.replace(tzinfo=timezone.utc)
+                    approved_at = approved_at.replace(tzinfo=dt_timezone.utc)
             except Exception:
                 await update.message.reply_text(f"⚠️ Skipping a post due to time error: {approved_at_str}")
                 continue
 
             expires_at = approved_at + timedelta(hours=24)
-            now = datetime.now(timezone.utc)
+            now = datetime.now(dt_timezone.utc)
             time_left = expires_at - now
 
             if time_left.total_seconds() <= 0:
@@ -865,16 +869,16 @@ async def handle_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     stats = get_user_stats(user.id)
     approved, rejected, task_slots, ref_slots = stats
     twitter = user_data.get('twitter_handle', 'Not set')
-
+    twitter_escaped = escape_markdown(twitter)
     await update.message.reply_text(
         f"👤 *Your Profile*\n\n"
-        f"🐦 Twitter: @{twitter}\n\n"
+        f"🐦 Twitter: @{twitter_escaped}\n\n"
         f"✅ Approved Posts: {approved}\n"
         f"❌ Rejected Posts: {rejected}\n\n"
         f"💰 Slot Earnings:\n"
         f"🪙 From Raids: {task_slots}\n"
         f"👥 From Referrals: {ref_slots}",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -885,7 +889,7 @@ async def handle_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         f"🎯 *Slot Info*\n\nHi {user.first_name}, you have *{slots}* engagement slot(s).\n\n"
         "📌 Earn more slots by participating in raids or referring others!",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -899,7 +903,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(
             "⛔ You are temporarily banned from posting due to unverified raids.\n"
             "📆 You can post again after 48 hours.",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
         return
 
@@ -911,7 +915,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
         await update.message.reply_text(
             "❌ Invalid tweet link. Only links from *twitter.com* or *x.com* are allowed.\n"
             "Please send a valid Twitter/X post link:",
-            parse_mode="Markdown"
+            parse_mode=ParseMode.MARKDOWN
         )
         return
 
@@ -947,7 +951,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
             await context.bot.send_message(
                 chat_id=admin_id,
                 text=f"📬 New post submitted by *{name}*:\n{text}",
-                parse_mode="Markdown"
+                parse_mode=ParseMode.MARKDOWN
             )
         except Exception as e:
             print(f"[ADMIN NOTIFY ERROR] Admin ID: {admin_id} - {e}")
@@ -962,7 +966,7 @@ async def post_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "📤 *Submit your Twitter/X post link for review:*\n\n"
         "🔗 Please paste a *valid Twitter (twitter.com) or X (x.com) post link* below.\n"
         "Example: https://x.com/Web3Kaiju/status/1901622919777652813",
-        parse_mode="Markdown",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=cancel_kbd()
     )
     context.user_data["awaiting_post"] = True
@@ -1003,7 +1007,7 @@ async def handle_referrals(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🎯 Invite others and earn *0.2 engagement slot* per referral!\n\n"
         f"🔗 Your referral link:\n`{ref_link}`\n\n"
         f"📊 *Total Referrals:* {ref1}",
-        parse_mode="Markdown"
+        parse_mode=ParseMode.MARKDOWN
     )
 
 
@@ -1012,7 +1016,7 @@ async def handle_support(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🎧 *Need help with the Bot?*\n\n"
         "Tap the button below to chat with us:",
-        parse_mode="Markdown",
+        parse_mode=ParseMode.MARKDOWN,
         reply_markup=InlineKeyboardMarkup(
             [[InlineKeyboardButton("Contact Us", url=SUPPORT_URL)]]
         )
@@ -1027,7 +1031,7 @@ async def handle_contacts(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🔗 X: https://x.com/web3kaiju\n"
         "📱 Telegram: https://t.me/web3kaijun\n"
         "📞 WhatsApp: https://wa.me/+2347043031993",
-        parse_mode="Markdown",
+        parse_mode=ParseMode.MARKDOWN,
         disable_web_page_preview=True
     )
 
@@ -1084,34 +1088,40 @@ async def handle_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def main():
     """Start the bot"""
+
+    # Set timezone using pytz and convert with astimezone (required by APScheduler)
+    lagos_tz = pytz.timezone("Africa/Lagos")
+
+    # Build the app first — don't pass job_queue manually
     app = ApplicationBuilder().token(API_KEY).build()
 
+    # Configure the job queue scheduler explicitly
+    app.job_queue.scheduler.configure(timezone=astimezone(lagos_tz))
+
+    # Run background tasks
     run_background_jobs()
 
-    # ─────────────── CALLBACK HANDLERS ───────────────
+    # ─────────────── HANDLERS ───────────────
+    app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("profile", handle_profile))
+    app.add_handler(CommandHandler("slots", handle_slots))
+    app.add_handler(CommandHandler("review", review_posts))
+    app.add_handler(CommandHandler("post", handle_post_submission))
+    app.add_handler(CommandHandler("referrals", handle_referrals))
+    app.add_handler(CommandHandler("support", handle_support))
+    app.add_handler(CommandHandler("contacts", handle_contacts))
+    app.add_handler(CommandHandler("connect", connect_twitter))
+    app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
+    app.add_handler(CommandHandler("my_raids", handle_my_ongoing_raids))
+
     app.add_handler(CallbackQueryHandler(
         handle_callback_buttons, pattern=r"^(confirm_twitter|responses|vconfirm|vreject)\|"))
     app.add_handler(CallbackQueryHandler(
         handle_raid_participation, pattern=r"^done\|"))
     app.add_handler(CallbackQueryHandler(
         admin_callback, pattern=r"^(approve|reject)\|"))
-    app.add_handler(CallbackQueryHandler(
-        handle_callback_buttons))  # catch-all fallback
+    app.add_handler(CallbackQueryHandler(handle_callback_buttons))
 
-    # ─────────────── COMMAND HANDLERS (group + private) ───────────────
-    app.add_handler(CommandHandler("start", start))
-    app.add_handler(CommandHandler("review", review_posts))
-    app.add_handler(CommandHandler("slots", handle_slots))
-    app.add_handler(CommandHandler("profile", handle_profile))
-    app.add_handler(CommandHandler("post", handle_post_submission))
-    app.add_handler(CommandHandler("referrals", handle_referrals))
-    app.add_handler(CommandHandler("support", handle_support))
-    app.add_handler(CommandHandler("contacts", handle_contacts))
-    app.add_handler(CommandHandler("ongoing_raids", handle_ongoing_raids))
-    app.add_handler(CommandHandler(
-        "my_raids", handle_my_ongoing_raids))  # optional
-
-    # ─────────────── TEXT BUTTON HANDLERS (private chats only) ───────────────
     app.add_handler(MessageHandler(
         filters.TEXT & ~filters.COMMAND & filters.ChatType.PRIVATE,
         handle_message_buttons

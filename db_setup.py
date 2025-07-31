@@ -18,6 +18,8 @@ def create_database():
             task_slots       REAL DEFAULT 0,
             ref_count_l1     INTEGER DEFAULT 0,
             twitter_handle   TEXT UNIQUE,
+            access_token     TEXT,
+            access_token_secret TEXT,
             created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             last_updated     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             banned_until     TIMESTAMP,
