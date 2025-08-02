@@ -67,6 +67,7 @@ OAUTH_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/connect
 # ──────────────────────── UTILITIES ─────────────────────────
 
 
+
 def run_background_jobs():
     """Runs hourly jobs for expiring posts and banning unresponsive users."""
     scheduler = BackgroundScheduler(timezone=pytz.utc)
@@ -99,7 +100,7 @@ def run_background_jobs():
     # DAILY REMINDER AT 10 AM
     scheduler.add_job(
         lambda: application.bot.send_message(
-            telegram_id=GROUP_ID,
+            chat_id=GROUP_ID,
             text="📢 Daily Reminder: Don’t forget to complete your raids and submit your posts!"
         ),
         trigger=CronTrigger(hour=10, minute=0, timezone='Africa/Lagos')
@@ -152,7 +153,7 @@ def escape_markdown(text):
 
 async def send_daily_reminder(context: ContextTypes.DEFAULT_TYPE):
     await context.bot.send_message(
-        telegram_id=GROUP_ID,
+        chat_id=GROUP_ID,
         text="🔔 *Daily Reminder*\n\nDon't forget to complete your raids, submit your posts, and earn engagement slots today! 💰",
         parse_mode=ParseMode.MARKDOWN
     )
@@ -258,8 +259,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    # Keep as-is if this is used in auth_server.py
-    connect_link = f"{OAUTH_URL}?tg_id={user_id}"
+    connect_link = f"{OAUTH_URL}?tg_id={user_id}"  # Keep as-is if this is used in auth_server.py
 
     keyboard = [
         [InlineKeyboardButton("🔗 Connect Twitter", url=connect_link)]
@@ -293,7 +293,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
             )
             # Go back to main menu
             await context.bot.send_message(
-                telegram_id=user.id,
+                chat_id=user.id,
                 text="🔘 You're now connected! Choose an option:",
                 reply_markup=main_kbd(user.id)
             )
@@ -315,7 +315,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         add_task_slot(doer_id, 0.1)
         close_verification(post_id, doer_id)
         await context.bot.send_message(
-            telegram_id=doer_id,
+            chat_id=doer_id,
             text="✅ Your raid was confirmed! You've earned 0.1 slots."
         )
         await query.edit_message_text("🟢 You confirmed the raid as successful.")
@@ -330,7 +330,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
 
         close_verification(post_id, doer_id)
         await context.bot.send_message(
-            telegram_id=doer_id,
+            chat_id=doer_id,
             text="❌ Your raid was rejected by the post owner. No slots awarded."
         )
         await query.edit_message_text("🔴 You rejected the raid.")
@@ -359,7 +359,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         followed_name = query.from_user.first_name
 
         await context.bot.send_message(
-            telegram_id=follower_id,
+            chat_id=follower_id,
             text=(
                 f"🎉 {followed_name} followed you back!\n\n"
                 f"🔗 View their profile: https://x.com/{followed_handle}"
@@ -368,7 +368,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
 
         # Confirm to the one who followed back
         await context.bot.send_message(
-            telegram_id=followed_id,
+            chat_id=followed_id,
             text="✅ Thanks for following back!"
         )
 
@@ -383,7 +383,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         x_profile_url = f"https://x.com/{handle}"
 
         await context.bot.send_message(
-            telegram_id=int(follower_id),
+            chat_id=int(follower_id),
             text=(
                 f"❌ {handle} ignored your follow request.\n\n"
                 f"If you'd like, you can unfollow them here:\n\n [x.com/{handle}]({x_profile_url})"
@@ -412,7 +412,7 @@ async def handle_callback_buttons(update: Update, context: ContextTypes.DEFAULT_
         name = follower.username or follower.first_name
         try:
             await context.bot.send_message(
-                telegram_id=followed_id,
+                chat_id=followed_id,
                 text=(
                     f"👤 {name} says they followed you!\n\n"
                     f"🔗 X Profile: https://x.com/{handle}"
@@ -619,7 +619,7 @@ async def handle_raid_participation(update: Update, context: ContextTypes.DEFAUL
         ]]
 
     await context.bot.send_message(
-        telegram_id=post_owner,
+        chat_id=post_owner,
         text=(
             f"📣 {user.username or user.full_name} says they've completed your raid:\n"
             f"🔗 {tweet_link}\n"
@@ -686,7 +686,7 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
                 "🔗 Tap below to connect:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(
-                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?telegram_id={user.id}")]
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
                 ])
             )
             return
@@ -807,7 +807,7 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
                 "🐦 To join raids, please connect your Twitter account first:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(
-                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?telegram_id={user.id}")]
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
                 ])
             )
             return
@@ -953,7 +953,7 @@ async def handle_post_submission(update: Update, context: ContextTypes.DEFAULT_T
     for admin_id in ADMINS:
         try:
             await context.bot.send_message(
-                telegram_id=admin_id,
+                chat_id=admin_id,
                 text=f"📬 New post submitted by *{name}*:\n{text}",
                 parse_mode=ParseMode.MARKDOWN
             )
@@ -1077,6 +1077,7 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Get user token from DB
     user = get_user(telegram_id)
     access_token = user.get("access_token")
+
     if not access_token:
         await query.edit_message_text("❗️Your Twitter account is not connected.")
         return
@@ -1107,7 +1108,7 @@ def main():
     app.job_queue.scheduler.configure(timezone=astimezone(lagos_tz))
 
     flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()
+    flask_thread.start()    
 
     # Run background tasks
     run_background_jobs()
