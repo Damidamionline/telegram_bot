@@ -67,7 +67,6 @@ OAUTH_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/connect
 # ──────────────────────── UTILITIES ─────────────────────────
 
 
-
 def run_background_jobs():
     """Runs hourly jobs for expiring posts and banning unresponsive users."""
     scheduler = BackgroundScheduler(timezone=pytz.utc)
@@ -259,6 +258,7 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    # Keep as-is if this is used in auth_server.py
     connect_link = f"{OAUTH_URL}?tg_id={user_id}"
 
     keyboard = [
@@ -270,6 +270,7 @@ async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Click the button below to connect your Twitter account:",
         reply_markup=reply_markup
     )
+
 
 # ──────────────────────── CALLBACK HANDLERS ─────────────────
 
@@ -1075,7 +1076,7 @@ async def verify_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Get user token from DB
     user = get_user(telegram_id)
-    access_token = user.get("twitter_access_token")
+    access_token = user.get("access_token")
     if not access_token:
         await query.edit_message_text("❗️Your Twitter account is not connected.")
         return
@@ -1106,7 +1107,7 @@ def main():
     app.job_queue.scheduler.configure(timezone=astimezone(lagos_tz))
 
     flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()    
+    flask_thread.start()
 
     # Run background tasks
     run_background_jobs()

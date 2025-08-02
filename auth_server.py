@@ -1,110 +1,135 @@
 from flask import Flask, request, redirect, session
-from requests_oauthlib import OAuth1Session
-import sqlite3
 import os
 import requests
+import secrets
+import base64
+import hashlib
+import sqlite3
+from dotenv import load_dotenv
 
+load_dotenv()
 app = Flask(__name__)
 app.secret_key = os.urandom(24)
 
-# Twitter API credentials
-TWITTER_API_KEY = "cM1bezvxdcOiZBh9Ta9D6qxe0"
-TWITTER_API_SECRET = "bRA3ExdjS73SDWKoDv58WJPhzbfGcvPWyK5dH38b8zrl09RBJx"
+# Twitter OAuth 2.0 Credentials
+CLIENT_ID = os.getenv("TWITTER_CLIENT_ID")
+CLIENT_SECRET = os.getenv("TWITTER_CLIENT_SECRET")
+AUTH_URL = "https://twitter.com/i/oauth2/authorize"
+TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
+SCOPE = "tweet.read tweet.write users.read offline.access like.write"
 CALLBACK_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/callback"
 
-# Telegram Bot Token
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_TOKEN")
 
 
-def save_twitter_account(telegram_id, twitter_handle, access_token, access_token_secret):
-    conn = sqlite3.connect("bot_data.db")
+def generate_code_verifier_challenge():
+    verifier = base64.urlsafe_b64encode(
+        secrets.token_bytes(32)).rstrip(b'=').decode('utf-8')
+    challenge = base64.urlsafe_b64encode(
+        hashlib.sha256(verifier.encode()).digest()
+    ).rstrip(b'=').decode('utf-8')
+    return verifier, challenge
+
+
+def save_tokens(chat_id, handle, twitter_id, access_token, refresh_token):
+    conn = sqlite3.connect("users.db")
     cur = conn.cursor()
-    cur.execute("""
-        UPDATE users
-        SET twitter_handle = ?, access_token = ?, access_token_secret = ?, last_updated = CURRENT_TIMESTAMP
-        WHERE telegram_id = ?
-    """, (twitter_handle, access_token, access_token_secret, telegram_id))
+
+    cur.execute("SELECT 1 FROM users WHERE chat_id = ?", (str(chat_id),))
+    exists = cur.fetchone()
+
+    if exists:
+        cur.execute("""
+            UPDATE users SET twitter_handle = ?, twitter_id = ?, access_token = ?, refresh_token = ?, last_updated = CURRENT_TIMESTAMP
+            WHERE chat_id = ?
+        """, (handle, twitter_id, access_token, refresh_token, str(chat_id)))
+    else:
+        cur.execute("""
+            INSERT INTO users (chat_id, twitter_handle, twitter_id, access_token, refresh_token)
+            VALUES (?, ?, ?, ?, ?)
+        """, (str(chat_id), handle, twitter_id, access_token, refresh_token))
+
     conn.commit()
     conn.close()
 
 
 @app.route('/twitter/connect')
-def connect_twitter():
-    telegram_id = request.args.get('chat_id')
-    if not telegram_id:
+def connect():
+    chat_id = request.args.get("chat_id")
+    if not chat_id:
         return "Missing chat_id", 400
 
-    session['telegram_id'] = telegram_id
+    code_verifier, code_challenge = generate_code_verifier_challenge()
+    session['code_verifier'] = code_verifier
+    session['chat_id'] = chat_id
 
-    oauth = OAuth1Session(
-        TWITTER_API_KEY,
-        client_secret=TWITTER_API_SECRET,
-        callback_uri=CALLBACK_URL
-    )
+    params = {
+        "response_type": "code",
+        "client_id": CLIENT_ID,
+        "redirect_uri": CALLBACK_URL,
+        "scope": SCOPE,
+        "state": secrets.token_urlsafe(16),
+        "code_challenge": code_challenge,
+        "code_challenge_method": "S256"
+    }
 
-    try:
-        fetch_response = oauth.fetch_request_token(
-            "https://api.twitter.com/oauth/request_token")
-    except Exception as e:
-        import traceback
-        print("⚠️ Detailed error fetching request token:")
-        print(traceback.format_exc())
-        return f"Failed to get request token: {e}", 500
-
-    session['request_token'] = fetch_response.get('oauth_token')
-    session['request_token_secret'] = fetch_response.get('oauth_token_secret')
-
-    auth_url = oauth.authorization_url(
-        "https://api.twitter.com/oauth/authorize")
+    auth_url = f"{AUTH_URL}?{'&'.join([f'{k}={requests.utils.quote(v)}' for k,
+                                      v in params.items()])}"
     return redirect(auth_url)
 
 
 @app.route('/twitter/callback')
-def twitter_callback():
-    oauth_verifier = request.args.get('oauth_verifier')
-    if not oauth_verifier:
-        return "Authorization failed: Missing oauth_verifier", 400
+def callback():
+    code = request.args.get("code")
+    if not code or "code_verifier" not in session or "chat_id" not in session:
+        return "Missing required session or code", 400
 
-    request_token = session.get('request_token')
-    request_token_secret = session.get('request_token_secret')
-    telegram_id = session.get('telegram_id')
+    code_verifier = session["code_verifier"]
+    chat_id = session["chat_id"]
 
-    if not all([request_token, request_token_secret, telegram_id]):
-        return "Session expired. Try again.", 400
+    # Basic Auth
+    basic_auth = base64.b64encode(
+        f"{CLIENT_ID}:{CLIENT_SECRET}".encode()).decode()
 
-    oauth = OAuth1Session(
-        TWITTER_API_KEY,
-        client_secret=TWITTER_API_SECRET,
-        resource_owner_key=request_token,
-        resource_owner_secret=request_token_secret,
-        verifier=oauth_verifier
-    )
+    headers = {
+        "Authorization": f"Basic {basic_auth}",
+        "Content-Type": "application/x-www-form-urlencoded"
+    }
+
+    data = {
+        "grant_type": "authorization_code",
+        "code": code,
+        "redirect_uri": CALLBACK_URL,
+        "code_verifier": code_verifier
+    }
 
     try:
-        oauth_tokens = oauth.fetch_access_token(
-            "https://api.twitter.com/oauth/access_token")
+        token_res = requests.post(TOKEN_URL, headers=headers, data=data)
+        token_json = token_res.json()
+        access_token = token_json["access_token"]
+        refresh_token = token_json.get("refresh_token")
+
+        # ✅ Fetch user info with access_token
+        user_res = requests.get(
+            "https://api.twitter.com/2/users/me",
+            headers={"Authorization": f"Bearer {access_token}"}
+        )
+        user_data = user_res.json().get("data", {})
+        twitter_id = user_data.get("id")
+        twitter_handle = user_data.get("username")
+
+        if not twitter_handle:
+            return "❌ Failed to retrieve user info", 500
+
+        # ✅ Save to DB
+        save_tokens(chat_id, twitter_handle, twitter_id,
+                    access_token, refresh_token)
+
+        return "✅ Twitter connected successfully, you can close this page!"
+
     except Exception as e:
-        print(f"Access token error: {e}")
-        return "Failed to get access token", 500
-
-    twitter_handle = oauth_tokens.get('screen_name')
-    access_token = oauth_tokens.get('oauth_token')
-    access_token_secret = oauth_tokens.get('oauth_token_secret')
-
-    save_twitter_account(telegram_id, twitter_handle,
-                         access_token, access_token_secret)
-
-    telegram_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-    try:
-        requests.post(telegram_url, json={
-            "chat_id": telegram_id,
-            "text": f"✅ Twitter account @{twitter_handle} connected successfully!"
-        })
-    except Exception as e:
-        print(f"Telegram API error: {e}")
-
-    return "Twitter account connected! You can close this window."
+        print("❌ Token error:", e)
+        return "❌ Failed to connect Twitter", 500
 
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=8080)
+if __name__ == "__main__":
+    app.run(host="0.0.0.0", port=8080)
