@@ -136,6 +136,7 @@ def callback():
                 chat_id=chat_id,
                 text=f"✅ Your Twitter account (@{twitter_handle}) has been connected successfully!",
             )
+            print(f"✅ Telegram message sent to {chat_id}")
         except Exception as e:
             print(f"❌ Failed to send Telegram message: {e}")
 
