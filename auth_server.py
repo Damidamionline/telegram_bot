@@ -80,6 +80,8 @@ def connect():
     return redirect(auth_url)
 
 
+from telegram import Bot
+
 @app.route('/twitter/callback')
 def callback():
     code = request.args.get("code")
@@ -129,14 +131,11 @@ def callback():
 
         # ✅ Notify user via Telegram
         try:
-            chat_id = int(telegram_id)  # Ensure it's an integer
-            print(f"🚀 Sending Telegram message to {chat_id}")
             bot = Bot(token=API_KEY)
             bot.send_message(
-                chat_id=chat_id,
+                chat_id=telegram_id,
                 text=f"✅ Your Twitter account (@{twitter_handle}) has been connected successfully!",
             )
-            print(f"✅ Telegram message sent to {chat_id}")
         except Exception as e:
             print(f"❌ Failed to send Telegram message: {e}")
 
@@ -145,6 +144,7 @@ def callback():
     except Exception as e:
         print("❌ Token error:", e)
         return "❌ Failed to connect Twitter", 500
+
 
 
 if __name__ == "__main__":
