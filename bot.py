@@ -67,7 +67,6 @@ OAUTH_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/connect
 # ──────────────────────── UTILITIES ─────────────────────────
 
 
-
 def run_background_jobs():
     """Runs hourly jobs for expiring posts and banning unresponsive users."""
     scheduler = BackgroundScheduler(timezone=pytz.utc)
@@ -259,7 +258,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
-    connect_link = f"{OAUTH_URL}?tg_id={user_id}"  # Keep as-is if this is used in auth_server.py
+    # Keep as-is if this is used in auth_server.py
+    connect_link = f"{OAUTH_URL}?tg_id={user_id}"
 
     keyboard = [
         [InlineKeyboardButton("🔗 Connect Twitter", url=connect_link)]
@@ -686,7 +686,7 @@ async def handle_message_buttons(update: Update, context: ContextTypes.DEFAULT_T
                 "🔗 Tap below to connect:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(
-                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?telegram_id={user.id}")]
                 ])
             )
             return
@@ -807,7 +807,7 @@ async def handle_ongoing_raids(update: Update, context: ContextTypes.DEFAULT_TYP
                 "🐦 To join raids, please connect your Twitter account first:",
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton(
-                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?chat_id={user.id}")]
+                        "🔗 Connect Twitter", url=f"{OAUTH_URL}?telegram_id={user.id}")]
                 ])
             )
             return
@@ -1108,7 +1108,7 @@ def main():
     app.job_queue.scheduler.configure(timezone=astimezone(lagos_tz))
 
     flask_thread = threading.Thread(target=run_flask)
-    flask_thread.start()    
+    flask_thread.start()
 
     # Run background tasks
     run_background_jobs()
