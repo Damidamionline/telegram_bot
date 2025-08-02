@@ -11,21 +11,25 @@ def create_database():
     # ───── users table ─────
     c.execute("""
         CREATE TABLE IF NOT EXISTS users (
-            telegram_id      INTEGER PRIMARY KEY,
-            name             TEXT,
-            ref_by           INTEGER,
-            slots            REAL DEFAULT 2,
-            task_slots       REAL DEFAULT 0,
-            ref_count_l1     INTEGER DEFAULT 0,
-            twitter_handle   TEXT UNIQUE,
-            access_token     TEXT,
-            access_token_secret TEXT,
-            created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            last_updated     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            banned_until     TIMESTAMP,
-            post_ban_until   TIMESTAMP,
-            last_post_at     TIMESTAMP
+            telegram_id          INTEGER PRIMARY KEY,
+            name                 TEXT,
+            ref_by               INTEGER,
+            slots                REAL DEFAULT 2,
+            task_slots           REAL DEFAULT 0,
+            ref_count_l1         INTEGER DEFAULT 0,
+            twitter_handle       TEXT UNIQUE,
+            twitter_id           TEXT,                       -- ✅ optional for v2 endpoints
+            access_token         TEXT,                       -- ✅ required
+            refresh_token        TEXT,                       -- ✅ required
+            token_expiry         TIMESTAMP,                  -- ✅ required
+            access_token_secret  TEXT,                       -- optional (only used for OAuth1)
+            created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            last_updated         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            banned_until         TIMESTAMP,
+            post_ban_until       TIMESTAMP,
+            last_post_at         TIMESTAMP
         )
+
     """)
 
     # ───── posts table ─────

@@ -31,7 +31,7 @@ def generate_code_verifier_challenge():
 
 
 def save_tokens(chat_id, handle, twitter_id, access_token, refresh_token):
-    conn = sqlite3.connect("users.db")
+    conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
 
     cur.execute("SELECT 1 FROM users WHERE chat_id = ?", (str(chat_id),))
