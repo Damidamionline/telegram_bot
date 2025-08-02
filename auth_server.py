@@ -6,6 +6,8 @@ import base64
 import hashlib
 import sqlite3
 from dotenv import load_dotenv
+from telegram import Bot
+
 
 load_dotenv()
 app = Flask(__name__)
@@ -18,6 +20,7 @@ AUTH_URL = "https://twitter.com/i/oauth2/authorize"
 TOKEN_URL = "https://api.twitter.com/2/oauth2/token"
 SCOPE = "tweet.read tweet.write users.read offline.access like.write"
 CALLBACK_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/callback"
+API_KEY = os.getenv("TELEGRAM_TOKEN")
 
 
 def generate_code_verifier_challenge():
@@ -108,7 +111,7 @@ def callback():
         access_token = token_json["access_token"]
         refresh_token = token_json.get("refresh_token")
 
-        # ✅ Fetch user info with access_token
+        # ✅ Fetch user info
         user_res = requests.get(
             "https://api.twitter.com/2/users/me",
             headers={"Authorization": f"Bearer {access_token}"}
@@ -123,6 +126,16 @@ def callback():
         # ✅ Save to DB
         save_tokens(telegram_id, twitter_handle, twitter_id,
                     access_token, refresh_token)
+
+        # ✅ Notify user via Telegram
+        try:
+            bot = Bot(token=API_KEY)
+            bot.send_message(
+                chat_id=telegram_id,
+                text=f"✅ Your Twitter account (@{twitter_handle}) has been connected successfully!",
+            )
+        except Exception as e:
+            print(f"❌ Failed to send Telegram message: {e}")
 
         return "✅ Twitter connected successfully, you can close this page!"
 
