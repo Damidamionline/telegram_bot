@@ -20,7 +20,6 @@ SCOPE = "tweet.read tweet.write users.read offline.access like.write"
 CALLBACK_URL = "https://telegram-bot-production-d526.up.railway.app/twitter/callback"
 
 
-
 def generate_code_verifier_challenge():
     verifier = base64.urlsafe_b64encode(
         secrets.token_bytes(32)).rstrip(b'=').decode('utf-8')
@@ -30,23 +29,24 @@ def generate_code_verifier_challenge():
     return verifier, challenge
 
 
-def save_tokens(chat_id, handle, twitter_id, access_token, refresh_token):
+def save_tokens(telegram_id, handle, twitter_id, access_token, refresh_token):
     conn = sqlite3.connect("bot_data.db")
     cur = conn.cursor()
 
-    cur.execute("SELECT 1 FROM users WHERE chat_id = ?", (str(chat_id),))
+    cur.execute("SELECT 1 FROM users WHERE telegram_id = ?",
+                (str(telegram_id),))
     exists = cur.fetchone()
 
     if exists:
         cur.execute("""
             UPDATE users SET twitter_handle = ?, twitter_id = ?, access_token = ?, refresh_token = ?, last_updated = CURRENT_TIMESTAMP
-            WHERE chat_id = ?
-        """, (handle, twitter_id, access_token, refresh_token, str(chat_id)))
+            WHERE telegram_id = ?
+        """, (handle, twitter_id, access_token, refresh_token, str(telegram_id)))
     else:
         cur.execute("""
-            INSERT INTO users (chat_id, twitter_handle, twitter_id, access_token, refresh_token)
+            INSERT INTO users (telegram_id, twitter_handle, twitter_id, access_token, refresh_token)
             VALUES (?, ?, ?, ?, ?)
-        """, (str(chat_id), handle, twitter_id, access_token, refresh_token))
+        """, (str(telegram_id), handle, twitter_id, access_token, refresh_token))
 
     conn.commit()
     conn.close()
@@ -54,13 +54,13 @@ def save_tokens(chat_id, handle, twitter_id, access_token, refresh_token):
 
 @app.route('/twitter/connect')
 def connect():
-    chat_id = request.args.get("chat_id")
-    if not chat_id:
-        return "Missing chat_id", 400
+    telegram_id = request.args.get("telegram_id")
+    if not telegram_id:
+        return "Missing telegram_id", 400
 
     code_verifier, code_challenge = generate_code_verifier_challenge()
     session['code_verifier'] = code_verifier
-    session['chat_id'] = chat_id
+    session['telegram_id'] = telegram_id
 
     params = {
         "response_type": "code",
@@ -80,11 +80,11 @@ def connect():
 @app.route('/twitter/callback')
 def callback():
     code = request.args.get("code")
-    if not code or "code_verifier" not in session or "chat_id" not in session:
+    if not code or "code_verifier" not in session or "telegram_id" not in session:
         return "Missing required session or code", 400
 
     code_verifier = session["code_verifier"]
-    chat_id = session["chat_id"]
+    telegram_id = session["telegram_id"]
 
     # Basic Auth
     basic_auth = base64.b64encode(
@@ -121,7 +121,7 @@ def callback():
             return "❌ Failed to retrieve user info", 500
 
         # ✅ Save to DB
-        save_tokens(chat_id, twitter_handle, twitter_id,
+        save_tokens(telegram_id, twitter_handle, twitter_id,
                     access_token, refresh_token)
 
         return "✅ Twitter connected successfully, you can close this page!"

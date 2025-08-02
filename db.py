@@ -502,7 +502,7 @@ def auto_approve_stale_posts(context=None):
         for post in posts:
             try:
                 context.bot.send_message(
-                    chat_id=post["telegram_id"],
+                    telegram_id=post["telegram_id"],
                     text=f"✅ Your post has been automatically approved:\n🔗 {post['post_link']}"
                 )
             except Exception as e:
