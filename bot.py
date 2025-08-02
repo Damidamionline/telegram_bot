@@ -261,7 +261,6 @@ async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Keep as-is if this is used in auth_server.py
     connect_link = f"{OAUTH_URL}?telegram_id={user_id}"
 
-
     keyboard = [
         [InlineKeyboardButton("🔗 Connect Twitter", url=connect_link)]
     ]
@@ -867,17 +866,20 @@ async def handle_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Handle profile display"""
     user = update.effective_user
     user_data = get_user(user.id)
+
     if not user_data:
-        await update.message.reply_text("User not found.")
+        await update.message.reply_text("❗️User not found. Please start the bot using /start.")
         return
 
     stats = get_user_stats(user.id)
     approved, rejected, task_slots, ref_slots = stats
-    twitter = user_data.get('twitter_handle', 'Not set')
-    twitter_escaped = escape_markdown(twitter)
+
+    twitter = user_data.get("twitter_handle")
+    twitter_display = f"@{escape_markdown(twitter)}" if twitter else "❌ Not connected"
+
     await update.message.reply_text(
         f"👤 *Your Profile*\n\n"
-        f"🐦 Twitter: @{twitter_escaped}\n\n"
+        f"🐦 Twitter: {twitter_display}\n\n"
         f"✅ Approved Posts: {approved}\n"
         f"❌ Rejected Posts: {rejected}\n\n"
         f"💰 Slot Earnings:\n"
@@ -885,6 +887,15 @@ async def handle_profile(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"👥 From Referrals: {ref_slots}",
         parse_mode=ParseMode.MARKDOWN
     )
+
+    if not twitter:
+        await update.message.reply_text(
+            "🔗 You haven't connected your Twitter account yet.",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton(
+                    "Connect Twitter", url=f"{OAUTH_URL}?telegram_id={user.id}")
+            ]])
+        )
 
 
 async def handle_slots(update: Update, context: ContextTypes.DEFAULT_TYPE):
