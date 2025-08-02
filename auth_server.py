@@ -132,10 +132,7 @@ def callback():
         # ✅ Notify user via Telegram
         try:
             bot = Bot(token=API_KEY)
-            bot.send_message(
-                chat_id=telegram_id,
-                text=f"✅ Your Twitter account (@{twitter_handle}) has been connected successfully!",
-            )
+            bot.send_message(chat_id=telegram_id,text=f"✅ Your Twitter account (@{twitter_handle}) has been connected successfully!",)
         except Exception as e:
             print(f"❌ Failed to send Telegram message: {e}")
 

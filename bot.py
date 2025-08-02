@@ -259,7 +259,8 @@ async def admin_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def connect_twitter(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     # Keep as-is if this is used in auth_server.py
-    connect_link = f"{OAUTH_URL}?tg_id={user_id}"
+    connect_link = f"{OAUTH_URL}?telegram_id={user_id}"
+
 
     keyboard = [
         [InlineKeyboardButton("🔗 Connect Twitter", url=connect_link)]
